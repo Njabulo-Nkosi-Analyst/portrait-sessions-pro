@@ -1,17 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Layout } from "@/components/Layout";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowRight, Star } from "lucide-react";
+import { ArrowRight, Play, Star } from "lucide-react";
 
 const CATEGORIES = [
-  { name: "Weddings", img: "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80" },
-  { name: "Portraits", img: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=800&q=80" },
-  { name: "Events", img: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=800&q=80" },
-  { name: "Products", img: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80" },
-  { name: "Maternity", img: "https://images.unsplash.com/photo-1519011985187-444d62641929?auto=format&fit=crop&w=800&q=80" },
-  { name: "Kids", img: "https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?auto=format&fit=crop&w=800&q=80" },
-  { name: "Corporate", img: "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?auto=format&fit=crop&w=800&q=80" },
+  { name: "Weddings", img: "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1600&q=80" },
+  { name: "Portraits", img: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=1600&q=80" },
+  { name: "Events", img: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1600&q=80" },
+  { name: "Sport", img: "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1600&q=80" },
+  { name: "Couples", img: "https://images.unsplash.com/photo-1519225421980-715cb0215aed?auto=format&fit=crop&w=1600&q=80" },
+  { name: "Family", img: "https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?auto=format&fit=crop&w=1600&q=80" },
+  { name: "Corporate", img: "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?auto=format&fit=crop&w=1600&q=80" },
 ];
 
 const FEATURED = [
@@ -24,7 +25,7 @@ const FEATURED = [
 ];
 
 export const Route = createFileRoute("/")({
-  head: () => ({ meta: [{ title: "Garlo Studio — Photography that captures your story" }] }),
+  head: () => ({ meta: [{ title: "TANN Photography — Your story in natural light" }] }),
   component: Home,
 });
 
@@ -34,57 +35,69 @@ function Home() {
     queryFn: async () => (await supabase.from("testimonials").select("*").limit(3)).data ?? [],
   });
 
+  const [activeCat, setActiveCat] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setActiveCat(c => (c + 1) % CATEGORIES.length), 3500);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <Layout>
-      {/* Hero */}
-      <section className="max-w-7xl mx-auto px-5 lg:px-8 pt-10 lg:pt-16">
-        <div className="text-center max-w-4xl mx-auto">
-          <span className="eyebrow">Cape Town · Worldwide</span>
-          <h1 className="mt-6 font-display text-5xl md:text-7xl lg:text-8xl font-bold leading-[0.95]">
-            Capturing moments<br />
-            <span className="text-gradient-warm">that last forever.</span>
-          </h1>
-          <p className="mt-6 text-base md:text-lg text-muted-foreground max-w-2xl mx-auto bg-slate-50">
-            Garlo Studio · Cape Town, South Africa. Wedding, portrait, event and brand photography crafted with cinematic care.
-          </p>
-        </div>
-
-        {/* Category portrait grid */}
-        <div className="mt-12 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+      {/* Hero with rotating background */}
+      <section className="relative overflow-hidden min-h-[85vh]">
+        <div className="absolute inset-0">
           {CATEGORIES.map((c, i) => (
-            <Link key={c.name} to="/gallery"
-              className="group relative overflow-hidden rounded-xl bg-secondary aspect-[3/4] block"
-              style={{ animation: `fadeUp .6s ease ${i * 60}ms both` }}>
-              <img src={c.img} alt={c.name} loading="lazy"
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
-              <div className="absolute inset-x-0 bottom-0 p-3 lg:p-4">
-                <div className="font-display font-bold text-sm lg:text-base">{c.name}</div>
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-primary mt-1">
-                  View <ArrowRight size={12} />
-                </div>
-              </div>
-            </Link>
+            <img key={c.name} src={c.img} alt={c.name} loading={i === 0 ? "eager" : "lazy"}
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${i === activeCat ? "opacity-100" : "opacity-0"}`} />
           ))}
+          <div className="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-background/30" />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/60" />
         </div>
 
-        <div className="mt-10 flex flex-wrap justify-center gap-3">
-          <Link to="/contact" className="btn-lime px-6 py-3 rounded-md text-sm">Book a Session</Link>
-          <Link to="/gallery" className="btn-ghost-dark px-6 py-3 rounded-md text-sm">View All Work</Link>
+        <div className="relative max-w-7xl mx-auto px-5 lg:px-8 pt-16 lg:pt-28 pb-20 lg:pb-32">
+          <div className="max-w-3xl">
+            <div className="flex items-center gap-3 text-xs uppercase tracking-[0.25em] text-muted-foreground">
+              <span className="w-10 h-px bg-muted-foreground/60" />
+              TANN Photography · {CATEGORIES[activeCat].name}
+            </div>
+            <h1 className="mt-6 font-display text-5xl md:text-7xl lg:text-8xl font-bold leading-[0.95]">
+              Your story<br />
+              in <span className="italic text-gradient-warm">natural light</span><span className="text-primary">.</span>
+            </h1>
+            <p className="mt-6 text-base md:text-lg text-muted-foreground max-w-xl">
+              We capture the true essence of life through our lens — joyous weddings, fun lifestyle sessions, sport, and memorable events. Timeless visuals you'll treasure forever.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link to="/contact" className="btn-lime px-6 py-3 rounded-full text-sm font-semibold inline-flex items-center gap-2">
+                Book a Session <ArrowRight size={16} />
+              </Link>
+              <Link to="/gallery" className="px-6 py-3 rounded-full text-sm bg-secondary/80 backdrop-blur border border-border inline-flex items-center gap-2 hover:bg-secondary">
+                <Play size={14} className="fill-current" /> View Gallery
+              </Link>
+            </div>
+            <div className="mt-10 flex flex-wrap gap-2">
+              {CATEGORIES.map((c, i) => (
+                <button key={c.name} onClick={() => setActiveCat(i)}
+                  className={`px-4 py-1.5 rounded-full text-xs border transition-all ${i === activeCat ? "bg-primary text-primary-foreground border-primary" : "bg-secondary/60 backdrop-blur border-border text-muted-foreground hover:text-foreground"}`}>
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
       {/* Stats */}
-      <section className="max-w-7xl mx-auto px-5 lg:px-8 mt-24">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <section className="max-w-7xl mx-auto px-5 lg:px-8 mt-12 lg:mt-16">
+        <div className="grid grid-cols-3 gap-4 border-y border-border py-8">
           {[
-            { n: "500+", l: "Sessions delivered" },
-            { n: "5★", l: "Average client rating" },
-            { n: "10+", l: "Years experience" },
+            { n: "25+", l: "Years shooting" },
+            { n: "1.2K", l: "Sessions delivered" },
+            { n: "4.98★", l: "Avg rating" },
           ].map(s => (
-            <div key={s.l} className="panel p-8 text-center">
-              <div className="font-display text-5xl font-bold text-gradient-warm">{s.n}</div>
-              <div className="mt-2 text-sm text-muted-foreground">{s.l}</div>
+            <div key={s.l}>
+              <div className="font-display text-3xl md:text-5xl font-bold">{s.n}</div>
+              <div className="mt-2 text-xs uppercase tracking-widest text-muted-foreground">{s.l}</div>
             </div>
           ))}
         </div>
