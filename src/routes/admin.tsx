@@ -150,7 +150,7 @@ function Admin() {
     const { error } = await supabase.from("packages").update(patch).eq("id", id);
     if (error) toast.error(error.message); else refresh("all-packages");
   };
-  const updatePackageField = async (id: string, patch: Record<string, any>) => {
+  const updatePackageField = async (id: string, patch: { price?: number; cover_image_url?: string | null }) => {
     const { error } = await supabase.from("packages").update(patch).eq("id", id);
     if (error) toast.error(error.message); else { toast.success("Saved"); refresh("all-packages"); }
   };
