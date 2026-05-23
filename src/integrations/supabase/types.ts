@@ -14,6 +14,221 @@ export type Database = {
   }
   public: {
     Tables: {
+      availability_blocks: {
+        Row: {
+          block_date: string
+          created_at: string
+          end_time: string | null
+          id: string
+          is_available: boolean
+          note: string | null
+          start_time: string | null
+        }
+        Insert: {
+          block_date: string
+          created_at?: string
+          end_time?: string | null
+          id?: string
+          is_available?: boolean
+          note?: string | null
+          start_time?: string | null
+        }
+        Update: {
+          block_date?: string
+          created_at?: string
+          end_time?: string | null
+          id?: string
+          is_available?: boolean
+          note?: string | null
+          start_time?: string | null
+        }
+        Relationships: []
+      }
+      booking_expenses: {
+        Row: {
+          amount: number
+          booking_id: string
+          created_at: string
+          id: string
+          km: number | null
+          label: string | null
+          rate_per_km: number | null
+          type: string
+        }
+        Insert: {
+          amount?: number
+          booking_id: string
+          created_at?: string
+          id?: string
+          km?: number | null
+          label?: string | null
+          rate_per_km?: number | null
+          type: string
+        }
+        Update: {
+          amount?: number
+          booking_id?: string
+          created_at?: string
+          id?: string
+          km?: number | null
+          label?: string | null
+          rate_per_km?: number | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_expenses_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bookings: {
+        Row: {
+          category: string | null
+          client_email: string | null
+          client_name: string
+          client_whatsapp: string | null
+          confirmed_at: string
+          created_at: string
+          discount_amount: number
+          discount_reason: string | null
+          final_price: number
+          id: string
+          inquiry_id: string | null
+          notes: string | null
+          package_name: string | null
+          package_price: number
+          session_date: string | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          category?: string | null
+          client_email?: string | null
+          client_name: string
+          client_whatsapp?: string | null
+          confirmed_at?: string
+          created_at?: string
+          discount_amount?: number
+          discount_reason?: string | null
+          final_price?: number
+          id?: string
+          inquiry_id?: string | null
+          notes?: string | null
+          package_name?: string | null
+          package_price?: number
+          session_date?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          category?: string | null
+          client_email?: string | null
+          client_name?: string
+          client_whatsapp?: string | null
+          confirmed_at?: string
+          created_at?: string
+          discount_amount?: number
+          discount_reason?: string | null
+          final_price?: number
+          id?: string
+          inquiry_id?: string | null
+          notes?: string | null
+          package_name?: string | null
+          package_price?: number
+          session_date?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_inquiry_id_fkey"
+            columns: ["inquiry_id"]
+            isOneToOne: false
+            referencedRelation: "inquiries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_gallery_access: {
+        Row: {
+          booking_id: string | null
+          client_name: string
+          cover_url: string | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          title: string | null
+          token: string
+        }
+        Insert: {
+          booking_id?: string | null
+          client_name: string
+          cover_url?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          title?: string | null
+          token: string
+        }
+        Update: {
+          booking_id?: string | null
+          client_name?: string
+          cover_url?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          title?: string | null
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_gallery_access_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_gallery_images: {
+        Row: {
+          caption: string | null
+          created_at: string
+          gallery_id: string
+          id: string
+          sort_order: number
+          url: string
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          gallery_id: string
+          id?: string
+          sort_order?: number
+          url: string
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          gallery_id?: string
+          id?: string
+          sort_order?: number
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_gallery_images_gallery_id_fkey"
+            columns: ["gallery_id"]
+            isOneToOne: false
+            referencedRelation: "client_gallery_access"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gallery_images: {
         Row: {
           caption: string | null
@@ -52,6 +267,7 @@ export type Database = {
           is_active: boolean
           sort_order: number
           url: string
+          video_url: string | null
         }
         Insert: {
           category_label: string
@@ -60,6 +276,7 @@ export type Database = {
           is_active?: boolean
           sort_order?: number
           url: string
+          video_url?: string | null
         }
         Update: {
           category_label?: string
@@ -68,6 +285,7 @@ export type Database = {
           is_active?: boolean
           sort_order?: number
           url?: string
+          video_url?: string | null
         }
         Relationships: []
       }
@@ -113,6 +331,39 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          is_read: boolean
+          kind: string
+          link: string | null
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          kind: string
+          link?: string | null
+          title: string
+          user_id?: string | null
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          kind?: string
+          link?: string | null
+          title?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       packages: {
         Row: {
           category: string
@@ -126,6 +377,7 @@ export type Database = {
           name: string
           price: number
           sort_order: number
+          video_url: string | null
         }
         Insert: {
           category: string
@@ -139,6 +391,7 @@ export type Database = {
           name: string
           price: number
           sort_order?: number
+          video_url?: string | null
         }
         Update: {
           category?: string
@@ -152,6 +405,7 @@ export type Database = {
           name?: string
           price?: number
           sort_order?: number
+          video_url?: string | null
         }
         Relationships: []
       }
@@ -214,6 +468,93 @@ export type Database = {
           title?: string
         }
         Relationships: []
+      }
+      quotes: {
+        Row: {
+          category: string
+          created_at: string
+          email: string
+          estimated_price: number
+          extras: Json
+          hours: number
+          id: string
+          location: string | null
+          name: string
+          whatsapp: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          email: string
+          estimated_price?: number
+          extras?: Json
+          hours?: number
+          id?: string
+          location?: string | null
+          name: string
+          whatsapp?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          email?: string
+          estimated_price?: number
+          extras?: Json
+          hours?: number
+          id?: string
+          location?: string | null
+          name?: string
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
+      reviews: {
+        Row: {
+          booking_id: string | null
+          client_name: string
+          created_at: string
+          gallery_id: string | null
+          id: string
+          is_published: boolean
+          quote: string
+          rating: number
+        }
+        Insert: {
+          booking_id?: string | null
+          client_name: string
+          created_at?: string
+          gallery_id?: string | null
+          id?: string
+          is_published?: boolean
+          quote: string
+          rating?: number
+        }
+        Update: {
+          booking_id?: string | null
+          client_name?: string
+          created_at?: string
+          gallery_id?: string | null
+          id?: string
+          is_published?: boolean
+          quote?: string
+          rating?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_gallery_id_fkey"
+            columns: ["gallery_id"]
+            isOneToOne: false
+            referencedRelation: "client_gallery_access"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       site_settings: {
         Row: {
