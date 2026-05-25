@@ -364,40 +364,14 @@ function Admin() {
         )}
 
         {tab === "bookings" && (
-          <div className="mt-8 panel overflow-x-auto">
-            <div className="p-4 border-b border-border text-sm text-muted-foreground">
-              Confirm an inquiry → it becomes a booking and KPIs update. For custom rates / discounts, fill them in the dialog.
-            </div>
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-muted-foreground border-b border-border">
-                <tr><th className="text-left p-3">Date</th><th className="text-left p-3">Name</th><th className="text-left p-3">Category</th><th className="text-left p-3">Package</th><th className="text-left p-3">Preferred</th><th className="text-left p-3">Contact</th><th className="text-left p-3">Status</th><th className="text-left p-3">Action</th></tr>
-              </thead>
-              <tbody>
-                {inquiries.map(i => (
-                  <tr key={i.id} className="border-b border-border/50">
-                    <td className="p-3 text-muted-foreground whitespace-nowrap">{new Date(i.created_at).toLocaleDateString()}</td>
-                    <td className="p-3 font-semibold">{i.name}</td>
-                    <td className="p-3">{i.category ?? "—"}</td>
-                    <td className="p-3">{i.package_interest ?? "Custom"}</td>
-                    <td className="p-3 text-muted-foreground">{i.preferred_date ?? "—"}</td>
-                    <td className="p-3 text-xs">{i.email}<br/>{i.whatsapp}</td>
-                    <td className="p-3">
-                      <select value={i.status} onChange={e => updateStatus(i.id, e.target.value)}
-                        className="bg-input border border-border rounded px-2 py-1 text-xs">
-                        {["new","read","contacted","booked"].map(s => <option key={s}>{s}</option>)}
-                      </select>
-                    </td>
-                    <td className="p-3">
-                      {i.status !== "booked" ? (
-                        <button onClick={() => setConfirmFor(i)} className="btn-lime px-3 py-1.5 rounded text-xs font-semibold inline-flex items-center gap-1">
-                          <CheckCircle2 size={12}/> Confirm
-                        </button>
-                      ) : (
-                        <span className="text-xs text-primary inline-flex items-center gap-1"><CheckCircle2 size={12}/> Booked</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+          <BookingsTab
+            inquiries={inquiries}
+            bookings={bookings}
+            setConfirmFor={setConfirmFor}
+            updateStatus={updateStatus}
+            refresh={refresh}
+          />
+        )}
                 {inquiries.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No inquiries yet.</td></tr>}
               </tbody>
             </table>
