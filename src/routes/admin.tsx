@@ -105,6 +105,24 @@ function Admin() {
     const prev7 = inquiries.filter(i => { const d = now - new Date(i.created_at).getTime(); return d >= week && d < 2 * week; }).length;
     const growth = prev7 ? ((last7 - prev7) / prev7) * 100 : last7 ? 100 : 0;
     const last30Revenue = bookings.filter(b => now - new Date(b.confirmed_at).getTime() < 30 * 86400000).reduce((s, b) => s + Number(b.final_price), 0);
+
+    // Month-over-month revenue growth %
+    const d = new Date();
+    const thisMonthStart = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+    const lastMonthStart = new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime();
+    const thisMonthRev = bookings.filter(b => new Date(b.confirmed_at).getTime() >= thisMonthStart).reduce((s, b) => s + Number(b.final_price), 0);
+    const lastMonthRev = bookings.filter(b => { const t = new Date(b.confirmed_at).getTime(); return t >= lastMonthStart && t < thisMonthStart; }).reduce((s, b) => s + Number(b.final_price), 0);
+    const monthGrowth = lastMonthRev ? ((thisMonthRev - lastMonthRev) / lastMonthRev) * 100 : thisMonthRev ? 100 : 0;
+
+    // Avg spend per unique client (for pricing decisions)
+    const spendByClient = new Map<string, number>();
+    bookings.forEach(b => {
+      const key = (b.client_email || b.client_name || b.id).toLowerCase();
+      spendByClient.set(key, (spendByClient.get(key) ?? 0) + Number(b.final_price));
+    });
+    const uniqueClients = spendByClient.size;
+    const avgSpendPerClient = uniqueClients ? netRevenue / uniqueClients : 0;
+
     // top expense category
     const catTotals: Record<string, number> = {};
     expenses.forEach(e => { catTotals[e.type] = (catTotals[e.type] ?? 0) + Number(e.amount); });
@@ -112,7 +130,8 @@ function Admin() {
 
     return { grossRevenue, netRevenue, totalDiscounts, totalExpenses, netProfit, aov, margin,
       discountImpact, pipelineValue, conversion, newCount, avgRating, last7, growth,
-      projected: last30Revenue, bookings: bookings.length, topExpense };
+      projected: last30Revenue, bookings: bookings.length, topExpense,
+      thisMonthRev, lastMonthRev, monthGrowth, uniqueClients, avgSpendPerClient };
   }, [bookings, expenses, inquiries, priceMap, testimonials]);
 
   const trend = useMemo(() => {
@@ -215,10 +234,18 @@ function Admin() {
           <>
             {/* KPI cards */}
             <div className="mt-8 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              <KPI icon={<PiggyBank size={18}/>} label="Net profit" value={`R${stats.netProfit.toLocaleString()}`} accent />
+              <KPI icon={<PiggyBank size={18}/>} label="Net profit" value={`R${stats.netProfit.toLocaleString()}`}
+                accent tone={stats.netProfit < 0 ? "loss" : "good"}
+                hint={stats.netProfit < 0 ? "⚠ Running at a loss — review expenses" : undefined} />
+              <KPI icon={<TrendingUp size={18}/>} label="Month growth" value={`${stats.monthGrowth >= 0 ? "+" : ""}${stats.monthGrowth.toFixed(1)}%`}
+                tone={stats.monthGrowth < 0 ? "loss" : stats.monthGrowth > 0 ? "good" : "neutral"}
+                hint={`This month R${stats.thisMonthRev.toLocaleString()} vs last R${stats.lastMonthRev.toLocaleString()}`} />
+              <KPI icon={<Users size={18}/>} label="Avg spend / client" value={`R${Math.round(stats.avgSpendPerClient).toLocaleString()}`}
+                hint={`${stats.uniqueClients} unique client${stats.uniqueClients === 1 ? "" : "s"} — useful for pricing`} />
+              <KPI icon={<Percent size={18}/>} label="Avg margin" value={`${stats.margin.toFixed(1)}%`}
+                tone={stats.margin < 0 ? "loss" : stats.margin > 30 ? "good" : "neutral"} />
               <KPI icon={<DollarSign size={18}/>} label="Net revenue" value={`R${stats.netRevenue.toLocaleString()}`} />
               <KPI icon={<TrendingDown size={18}/>} label="Expenses" value={`R${stats.totalExpenses.toLocaleString()}`} />
-              <KPI icon={<Percent size={18}/>} label="Avg margin" value={`${stats.margin.toFixed(1)}%`} />
               <KPI icon={<Tag size={18}/>} label="Discount impact" value={`-R${stats.totalDiscounts.toLocaleString()} (${stats.discountImpact.toFixed(1)}%)`} />
               <KPI icon={<Target size={18}/>} label="Avg order value" value={`R${Math.round(stats.aov).toLocaleString()}`} />
               <KPI icon={<Activity size={18}/>} label="Pipeline value" value={`R${stats.pipelineValue.toLocaleString()}`} />
@@ -337,44 +364,13 @@ function Admin() {
         )}
 
         {tab === "bookings" && (
-          <div className="mt-8 panel overflow-x-auto">
-            <div className="p-4 border-b border-border text-sm text-muted-foreground">
-              Confirm an inquiry → it becomes a booking and KPIs update. For custom rates / discounts, fill them in the dialog.
-            </div>
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-muted-foreground border-b border-border">
-                <tr><th className="text-left p-3">Date</th><th className="text-left p-3">Name</th><th className="text-left p-3">Category</th><th className="text-left p-3">Package</th><th className="text-left p-3">Preferred</th><th className="text-left p-3">Contact</th><th className="text-left p-3">Status</th><th className="text-left p-3">Action</th></tr>
-              </thead>
-              <tbody>
-                {inquiries.map(i => (
-                  <tr key={i.id} className="border-b border-border/50">
-                    <td className="p-3 text-muted-foreground whitespace-nowrap">{new Date(i.created_at).toLocaleDateString()}</td>
-                    <td className="p-3 font-semibold">{i.name}</td>
-                    <td className="p-3">{i.category ?? "—"}</td>
-                    <td className="p-3">{i.package_interest ?? "Custom"}</td>
-                    <td className="p-3 text-muted-foreground">{i.preferred_date ?? "—"}</td>
-                    <td className="p-3 text-xs">{i.email}<br/>{i.whatsapp}</td>
-                    <td className="p-3">
-                      <select value={i.status} onChange={e => updateStatus(i.id, e.target.value)}
-                        className="bg-input border border-border rounded px-2 py-1 text-xs">
-                        {["new","read","contacted","booked"].map(s => <option key={s}>{s}</option>)}
-                      </select>
-                    </td>
-                    <td className="p-3">
-                      {i.status !== "booked" ? (
-                        <button onClick={() => setConfirmFor(i)} className="btn-lime px-3 py-1.5 rounded text-xs font-semibold inline-flex items-center gap-1">
-                          <CheckCircle2 size={12}/> Confirm
-                        </button>
-                      ) : (
-                        <span className="text-xs text-primary inline-flex items-center gap-1"><CheckCircle2 size={12}/> Booked</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {inquiries.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No inquiries yet.</td></tr>}
-              </tbody>
-            </table>
-          </div>
+          <BookingsTab
+            inquiries={inquiries}
+            bookings={bookings}
+            setConfirmFor={setConfirmFor}
+            updateStatus={updateStatus}
+            refresh={refresh}
+          />
         )}
 
         {tab === "finance" && <FinanceTab bookings={bookings} expenses={expenses} expensesByBooking={expensesByBooking} stats={stats} qc={qc} />}
@@ -423,20 +419,172 @@ function Admin() {
 }
 
 // ─────────── KPI / Empty ───────────
-function KPI({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: string; accent?: boolean }) {
+function KPI({ icon, label, value, accent, tone, hint }: {
+  icon: React.ReactNode; label: string; value: string; accent?: boolean;
+  tone?: "loss" | "good" | "neutral"; hint?: string;
+}) {
+  const toneCls = tone === "loss"
+    ? "border-destructive/60 bg-destructive/10"
+    : tone === "good"
+    ? "border-primary/40"
+    : "";
+  const valueCls = tone === "loss"
+    ? "text-destructive"
+    : accent
+    ? "text-gradient-warm"
+    : "";
   return (
-    <div className={`panel p-4 ${accent ? "border-primary/40" : ""}`}>
+    <div className={`panel p-4 ${accent && tone !== "loss" ? "border-primary/40" : ""} ${toneCls}`}>
       <div className="flex items-center justify-between text-muted-foreground">
         <span className="text-xs uppercase tracking-wider">{label}</span>
-        <span className={accent ? "text-primary" : ""}>{icon}</span>
+        <span className={tone === "loss" ? "text-destructive" : accent ? "text-primary" : ""}>{icon}</span>
       </div>
-      <div className={`mt-2 font-display text-2xl font-bold ${accent ? "text-gradient-warm" : ""}`}>{value}</div>
+      <div className={`mt-2 font-display text-2xl font-bold ${valueCls}`}>{value}</div>
+      {hint && <div className={`text-[11px] mt-1 ${tone === "loss" ? "text-destructive" : "text-muted-foreground"}`}>{hint}</div>}
     </div>
   );
 }
 function Empty() {
   return <div className="text-center text-muted-foreground text-sm py-12">No data yet — will appear here as activity comes in.</div>;
 }
+
+
+
+// ─────────── Bookings Tab — pending vs completed ───────────
+function BookingsTab({ inquiries, bookings, setConfirmFor, updateStatus, refresh }: {
+  inquiries: any[]; bookings: any[]; setConfirmFor: (i: any) => void;
+  updateStatus: (id: string, s: string) => void; refresh: (...k: string[]) => void;
+}) {
+  const [view, setView] = useState<"pending" | "completed">("pending");
+
+  // Pending = inquiries not yet booked. Completed = bookings with status completed.
+  const pending = inquiries.filter(i => i.status !== "booked");
+  const active = bookings.filter(b => b.status !== "completed" && b.status !== "cancelled");
+  const completed = bookings.filter(b => b.status === "completed");
+
+  const markComplete = async (id: string) => {
+    const { error } = await supabase.from("bookings").update({ status: "completed" }).eq("id", id);
+    if (error) toast.error(error.message); else { toast.success("Marked completed"); refresh("all-bookings"); }
+  };
+  const clearCompleted = async () => {
+    if (completed.length === 0) return;
+    if (!confirm(`Archive (delete) ${completed.length} completed booking${completed.length === 1 ? "" : "s"}? KPIs will drop accordingly. New / active bookings are kept.`)) return;
+    const ids = completed.map(b => b.id);
+    const { error } = await supabase.from("bookings").delete().in("id", ids);
+    if (error) toast.error(error.message); else { toast.success("Completed bookings cleared"); refresh("all-bookings", "all-expenses"); }
+  };
+
+  return (
+    <div className="mt-8 space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex gap-1 p-1 bg-secondary rounded-full">
+          <button onClick={() => setView("pending")} className={`px-4 py-2 text-xs uppercase tracking-wider rounded-full ${view === "pending" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground"}`}>
+            Pending <span className="ml-1 text-[10px] opacity-70">({pending.length + active.length})</span>
+          </button>
+          <button onClick={() => setView("completed")} className={`px-4 py-2 text-xs uppercase tracking-wider rounded-full ${view === "completed" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground"}`}>
+            Completed <span className="ml-1 text-[10px] opacity-70">({completed.length})</span>
+          </button>
+        </div>
+        {view === "completed" && completed.length > 0 && (
+          <button onClick={clearCompleted} className="text-xs px-3 py-2 rounded border border-destructive/40 text-destructive hover:bg-destructive/10 inline-flex items-center gap-1.5">
+            <Trash2 size={12}/> Clear completed (keep new ones)
+          </button>
+        )}
+      </div>
+
+      {view === "pending" && (
+        <>
+          {/* Active bookings awaiting completion */}
+          {active.length > 0 && (
+            <div className="panel overflow-x-auto">
+              <div className="p-3 border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-2">
+                <Clock size={12}/> Active bookings · awaiting completion
+              </div>
+              <table className="w-full text-sm">
+                <thead className="text-xs uppercase text-muted-foreground border-b border-border">
+                  <tr><th className="text-left p-3">Date</th><th className="text-left p-3">Client</th><th className="text-left p-3">Package</th><th className="text-left p-3">Session</th><th className="text-right p-3">Revenue</th><th className="text-right p-3">Action</th></tr>
+                </thead>
+                <tbody>
+                  {active.map(b => (
+                    <tr key={b.id} className="border-b border-border/50">
+                      <td className="p-3 text-muted-foreground whitespace-nowrap">{new Date(b.confirmed_at).toLocaleDateString()}</td>
+                      <td className="p-3 font-semibold">{b.client_name}<div className="text-xs text-muted-foreground font-normal">{b.client_email}</div></td>
+                      <td className="p-3">{b.package_name}</td>
+                      <td className="p-3 text-muted-foreground">{b.session_date ?? "—"}</td>
+                      <td className="p-3 text-right font-semibold">R{Number(b.final_price).toLocaleString()}</td>
+                      <td className="p-3 text-right">
+                        <button onClick={() => markComplete(b.id)} className="btn-lime px-3 py-1.5 rounded text-xs font-semibold inline-flex items-center gap-1">
+                          <CheckCircle2 size={12}/> Mark completed
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Pending inquiries to confirm */}
+          <div className="panel overflow-x-auto">
+            <div className="p-3 border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-2">
+              <Inbox size={12}/> New inquiries · confirm to convert into a booking
+            </div>
+            <table className="w-full text-sm">
+              <thead className="text-xs uppercase text-muted-foreground border-b border-border">
+                <tr><th className="text-left p-3">Date</th><th className="text-left p-3">Name</th><th className="text-left p-3">Category</th><th className="text-left p-3">Package</th><th className="text-left p-3">Preferred</th><th className="text-left p-3">Contact</th><th className="text-left p-3">Status</th><th className="text-left p-3">Action</th></tr>
+              </thead>
+              <tbody>
+                {pending.map(i => (
+                  <tr key={i.id} className="border-b border-border/50">
+                    <td className="p-3 text-muted-foreground whitespace-nowrap">{new Date(i.created_at).toLocaleDateString()}</td>
+                    <td className="p-3 font-semibold">{i.name}</td>
+                    <td className="p-3">{i.category ?? "—"}</td>
+                    <td className="p-3">{i.package_interest ?? "Custom"}</td>
+                    <td className="p-3 text-muted-foreground">{i.preferred_date ?? "—"}</td>
+                    <td className="p-3 text-xs">{i.email}<br/>{i.whatsapp}</td>
+                    <td className="p-3">
+                      <select value={i.status} onChange={e => updateStatus(i.id, e.target.value)} className="bg-input border border-border rounded px-2 py-1 text-xs">
+                        {["new","read","contacted","booked"].map(s => <option key={s}>{s}</option>)}
+                      </select>
+                    </td>
+                    <td className="p-3">
+                      <button onClick={() => setConfirmFor(i)} className="btn-lime px-3 py-1.5 rounded text-xs font-semibold inline-flex items-center gap-1">
+                        <CheckCircle2 size={12}/> Confirm
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {pending.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No pending inquiries. ✨</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {view === "completed" && (
+        <div className="panel overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase text-muted-foreground border-b border-border">
+              <tr><th className="text-left p-3">Completed</th><th className="text-left p-3">Client</th><th className="text-left p-3">Package</th><th className="text-right p-3">Revenue</th></tr>
+            </thead>
+            <tbody>
+              {completed.map(b => (
+                <tr key={b.id} className="border-b border-border/50">
+                  <td className="p-3 text-muted-foreground whitespace-nowrap">{new Date(b.confirmed_at).toLocaleDateString()}</td>
+                  <td className="p-3 font-semibold">{b.client_name}<div className="text-xs text-muted-foreground font-normal">{b.client_email}</div></td>
+                  <td className="p-3">{b.package_name}<div className="text-xs text-muted-foreground">{b.category ?? "—"}</div></td>
+                  <td className="p-3 text-right font-semibold text-primary">R{Number(b.final_price).toLocaleString()}</td>
+                </tr>
+              ))}
+              {completed.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">No completed bookings yet. Mark active ones complete when sessions wrap.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 // ─────────── Confirm Booking Dialog ───────────
 function ConfirmDialog({ inquiry, packages, onClose, onDone }: { inquiry: any; packages: any[]; onClose: () => void; onDone: () => void }) {

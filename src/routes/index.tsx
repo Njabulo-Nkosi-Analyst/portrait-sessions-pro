@@ -1,9 +1,12 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Layout } from "@/components/Layout";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowRight, Play, Star } from "lucide-react";
+import { lovable } from "@/integrations/lovable/index";
+import { toast } from "sonner";
+import { useAuth } from "@/lib/auth";
+import { ArrowRight, Play, Star, Phone, MessageCircle, Instagram, Mail } from "lucide-react";
 
 const FALLBACK_HERO = [
   { id: "1", url: "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1600&q=80", category_label: "Weddings" },
@@ -69,8 +72,9 @@ function Home() {
               Your story<br />
               in <span className="italic text-gradient-warm">natural light</span><span className="text-primary">.</span>
             </h1>
-            <p className="mt-6 text-base md:text-lg text-muted-foreground max-w-xl">
-              We capture the true essence of life through our lens — joyous weddings, fun lifestyle sessions, sport, and memorable events. Timeless visuals you'll treasure forever.
+            <p className="mt-4 text-sm uppercase tracking-[0.3em] text-primary/90 font-semibold">Your Story In Natural Light</p>
+            <p className="mt-5 text-base md:text-lg text-muted-foreground max-w-xl">
+              At TANN Photography, we capture the true essence of life through our lens — from joyous weddings to fun lifestyle sessions and memorable events, we create timeless visuals you'll treasure forever.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/contact" className="btn-lime px-6 py-3 rounded-full text-sm font-semibold inline-flex items-center gap-2">
@@ -152,16 +156,110 @@ function Home() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="max-w-7xl mx-auto px-5 lg:px-8 mt-24">
-        <div className="panel p-10 lg:p-16 text-center">
-          <h2 className="font-display text-4xl md:text-6xl font-bold">
-            Ready to <span className="text-gradient-warm">create?</span>
-          </h2>
-          <p className="mt-4 text-muted-foreground max-w-xl mx-auto">Tell me about your vision — I'll get back within 24 hours.</p>
-          <Link to="/contact" className="mt-8 inline-flex btn-lime px-6 py-3 rounded-md text-sm">Start your booking</Link>
+      {/* CTA + Sign in / Contact */}
+      <section className="max-w-7xl mx-auto px-5 lg:px-8 mt-24 mb-16">
+        <div className="grid lg:grid-cols-2 gap-6">
+          <div className="panel p-8 lg:p-12">
+            <h2 className="font-display text-3xl md:text-5xl font-bold">
+              Ready to <span className="text-gradient-warm">create?</span>
+            </h2>
+            <p className="mt-4 text-muted-foreground">Preserve your most valuable moments with TANN Photography, where every shot tells your story.</p>
+            <Link to="/contact" className="mt-6 inline-flex btn-lime px-6 py-3 rounded-md text-sm">Start your booking</Link>
+
+            <div className="mt-8 pt-6 border-t border-border grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <a href="tel:0714967968" className="flex flex-col items-center gap-1.5 py-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors text-xs">
+                <Phone size={16} className="text-primary"/>071 496 7968
+              </a>
+              <a href="tel:0722516358" className="flex flex-col items-center gap-1.5 py-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors text-xs">
+                <Phone size={16} className="text-primary"/>072 251 6358
+              </a>
+              <a href="https://wa.me/27714967968" target="_blank" rel="noreferrer" className="flex flex-col items-center gap-1.5 py-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors text-xs">
+                <MessageCircle size={16} className="text-primary"/>WhatsApp
+              </a>
+              <a href="https://instagram.com/tann_photorgaphy_" target="_blank" rel="noreferrer" className="flex flex-col items-center gap-1.5 py-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors text-xs">
+                <Instagram size={16} className="text-primary"/>@tann_photorgaphy_
+              </a>
+            </div>
+          </div>
+          <HomeAuthPanel />
         </div>
       </section>
     </Layout>
+  );
+}
+
+function HomeAuthPanel() {
+  const { user } = useAuth();
+  const nav = useNavigate();
+  const [mode, setMode] = useState<"in" | "up">("in");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  if (user) {
+    return (
+      <div className="panel p-8 lg:p-12 flex flex-col justify-center text-center">
+        <h3 className="font-display text-2xl font-bold">Welcome back ✨</h3>
+        <p className="text-sm text-muted-foreground mt-2">Manage your bookings, favourites and gallery from your dashboard.</p>
+        <Link to="/dashboard" className="mt-6 inline-flex self-center btn-lime px-5 py-2.5 rounded-md text-sm">Open dashboard</Link>
+      </div>
+    );
+  }
+
+  const google = async () => {
+    const r = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + "/dashboard" });
+    if (r.error) toast.error("Couldn't sign in with Google");
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    if (mode === "in") {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) toast.error(error.message); else { toast.success("Welcome back"); nav({ to: "/dashboard" }); }
+    } else {
+      const { error } = await supabase.auth.signUp({
+        email, password,
+        options: { data: { full_name: name }, emailRedirectTo: window.location.origin + "/dashboard" },
+      });
+      if (error) toast.error(error.message); else toast.success("Account created — check your email to confirm.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="panel p-8 lg:p-12">
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <h3 className="font-display text-2xl font-bold">{mode === "in" ? "Sign in" : "Create account"}</h3>
+        <button onClick={() => setMode(mode === "in" ? "up" : "in")} className="text-xs text-primary hover:underline">
+          {mode === "in" ? "Need an account? Sign up →" : "Have an account? Sign in →"}
+        </button>
+      </div>
+      <p className="text-sm text-muted-foreground mb-5">Save your favourites and re-book in one click.</p>
+
+      <button onClick={google} className="w-full panel border-border hover:border-primary transition-colors px-4 py-2.5 rounded-md text-sm flex items-center justify-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 01-11.3 8 12 12 0 110-24c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 1024 44a20 20 0 0019.6-23.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8A12 12 0 0124 12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 006.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.3A12 12 0 0112.7 28l-6.5 5A20 20 0 0024 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 01-4.1 5.5l6.3 5.3C42.3 36 44 30.5 44 24c0-1.2-.1-2.3-.4-3.5z"/></svg>
+        Continue with Google
+      </button>
+
+      <div className="flex items-center gap-3 my-4 text-[10px] uppercase tracking-widest text-muted-foreground">
+        <span className="flex-1 h-px bg-border"/>or email<span className="flex-1 h-px bg-border"/>
+      </div>
+
+      <form onSubmit={submit} className="space-y-2.5">
+        {mode === "up" && (
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Full name" required
+            className="w-full bg-input border border-border rounded-md px-3 py-2.5 text-sm" />
+        )}
+        <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="Email" required
+          className="w-full bg-input border border-border rounded-md px-3 py-2.5 text-sm" />
+        <input value={password} onChange={e => setPassword(e.target.value)} type="password" placeholder="Password" required minLength={6}
+          className="w-full bg-input border border-border rounded-md px-3 py-2.5 text-sm" />
+        <button disabled={busy} className="w-full btn-lime px-4 py-2.5 rounded-md text-sm font-semibold disabled:opacity-50">
+          {busy ? "Please wait…" : mode === "in" ? "Sign in" : "Create account"}
+        </button>
+      </form>
+    </div>
   );
 }
