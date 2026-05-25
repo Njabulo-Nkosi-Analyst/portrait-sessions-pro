@@ -446,7 +446,142 @@ function KPI({ icon, label, value, accent, tone, hint }: {
 }
 function Empty() {
   return <div className="text-center text-muted-foreground text-sm py-12">No data yet — will appear here as activity comes in.</div>;
+
+// ─────────── Bookings Tab — pending vs completed ───────────
+function BookingsTab({ inquiries, bookings, setConfirmFor, updateStatus, refresh }: {
+  inquiries: any[]; bookings: any[]; setConfirmFor: (i: any) => void;
+  updateStatus: (id: string, s: string) => void; refresh: (...k: string[]) => void;
+}) {
+  const [view, setView] = useState<"pending" | "completed">("pending");
+
+  // Pending = inquiries not yet booked. Completed = bookings with status completed.
+  const pending = inquiries.filter(i => i.status !== "booked");
+  const active = bookings.filter(b => b.status !== "completed" && b.status !== "cancelled");
+  const completed = bookings.filter(b => b.status === "completed");
+
+  const markComplete = async (id: string) => {
+    const { error } = await supabase.from("bookings").update({ status: "completed" }).eq("id", id);
+    if (error) toast.error(error.message); else { toast.success("Marked completed"); refresh("all-bookings"); }
+  };
+  const clearCompleted = async () => {
+    if (completed.length === 0) return;
+    if (!confirm(`Archive (delete) ${completed.length} completed booking${completed.length === 1 ? "" : "s"}? KPIs will drop accordingly. New / active bookings are kept.`)) return;
+    const ids = completed.map(b => b.id);
+    const { error } = await supabase.from("bookings").delete().in("id", ids);
+    if (error) toast.error(error.message); else { toast.success("Completed bookings cleared"); refresh("all-bookings", "all-expenses"); }
+  };
+
+  return (
+    <div className="mt-8 space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex gap-1 p-1 bg-secondary rounded-full">
+          <button onClick={() => setView("pending")} className={`px-4 py-2 text-xs uppercase tracking-wider rounded-full ${view === "pending" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground"}`}>
+            Pending <span className="ml-1 text-[10px] opacity-70">({pending.length + active.length})</span>
+          </button>
+          <button onClick={() => setView("completed")} className={`px-4 py-2 text-xs uppercase tracking-wider rounded-full ${view === "completed" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground"}`}>
+            Completed <span className="ml-1 text-[10px] opacity-70">({completed.length})</span>
+          </button>
+        </div>
+        {view === "completed" && completed.length > 0 && (
+          <button onClick={clearCompleted} className="text-xs px-3 py-2 rounded border border-destructive/40 text-destructive hover:bg-destructive/10 inline-flex items-center gap-1.5">
+            <Trash2 size={12}/> Clear completed (keep new ones)
+          </button>
+        )}
+      </div>
+
+      {view === "pending" && (
+        <>
+          {/* Active bookings awaiting completion */}
+          {active.length > 0 && (
+            <div className="panel overflow-x-auto">
+              <div className="p-3 border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-2">
+                <Clock size={12}/> Active bookings · awaiting completion
+              </div>
+              <table className="w-full text-sm">
+                <thead className="text-xs uppercase text-muted-foreground border-b border-border">
+                  <tr><th className="text-left p-3">Date</th><th className="text-left p-3">Client</th><th className="text-left p-3">Package</th><th className="text-left p-3">Session</th><th className="text-right p-3">Revenue</th><th className="text-right p-3">Action</th></tr>
+                </thead>
+                <tbody>
+                  {active.map(b => (
+                    <tr key={b.id} className="border-b border-border/50">
+                      <td className="p-3 text-muted-foreground whitespace-nowrap">{new Date(b.confirmed_at).toLocaleDateString()}</td>
+                      <td className="p-3 font-semibold">{b.client_name}<div className="text-xs text-muted-foreground font-normal">{b.client_email}</div></td>
+                      <td className="p-3">{b.package_name}</td>
+                      <td className="p-3 text-muted-foreground">{b.session_date ?? "—"}</td>
+                      <td className="p-3 text-right font-semibold">R{Number(b.final_price).toLocaleString()}</td>
+                      <td className="p-3 text-right">
+                        <button onClick={() => markComplete(b.id)} className="btn-lime px-3 py-1.5 rounded text-xs font-semibold inline-flex items-center gap-1">
+                          <CheckCircle2 size={12}/> Mark completed
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Pending inquiries to confirm */}
+          <div className="panel overflow-x-auto">
+            <div className="p-3 border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-2">
+              <Inbox size={12}/> New inquiries · confirm to convert into a booking
+            </div>
+            <table className="w-full text-sm">
+              <thead className="text-xs uppercase text-muted-foreground border-b border-border">
+                <tr><th className="text-left p-3">Date</th><th className="text-left p-3">Name</th><th className="text-left p-3">Category</th><th className="text-left p-3">Package</th><th className="text-left p-3">Preferred</th><th className="text-left p-3">Contact</th><th className="text-left p-3">Status</th><th className="text-left p-3">Action</th></tr>
+              </thead>
+              <tbody>
+                {pending.map(i => (
+                  <tr key={i.id} className="border-b border-border/50">
+                    <td className="p-3 text-muted-foreground whitespace-nowrap">{new Date(i.created_at).toLocaleDateString()}</td>
+                    <td className="p-3 font-semibold">{i.name}</td>
+                    <td className="p-3">{i.category ?? "—"}</td>
+                    <td className="p-3">{i.package_interest ?? "Custom"}</td>
+                    <td className="p-3 text-muted-foreground">{i.preferred_date ?? "—"}</td>
+                    <td className="p-3 text-xs">{i.email}<br/>{i.whatsapp}</td>
+                    <td className="p-3">
+                      <select value={i.status} onChange={e => updateStatus(i.id, e.target.value)} className="bg-input border border-border rounded px-2 py-1 text-xs">
+                        {["new","read","contacted","booked"].map(s => <option key={s}>{s}</option>)}
+                      </select>
+                    </td>
+                    <td className="p-3">
+                      <button onClick={() => setConfirmFor(i)} className="btn-lime px-3 py-1.5 rounded text-xs font-semibold inline-flex items-center gap-1">
+                        <CheckCircle2 size={12}/> Confirm
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {pending.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No pending inquiries. ✨</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {view === "completed" && (
+        <div className="panel overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase text-muted-foreground border-b border-border">
+              <tr><th className="text-left p-3">Completed</th><th className="text-left p-3">Client</th><th className="text-left p-3">Package</th><th className="text-right p-3">Revenue</th></tr>
+            </thead>
+            <tbody>
+              {completed.map(b => (
+                <tr key={b.id} className="border-b border-border/50">
+                  <td className="p-3 text-muted-foreground whitespace-nowrap">{new Date(b.confirmed_at).toLocaleDateString()}</td>
+                  <td className="p-3 font-semibold">{b.client_name}<div className="text-xs text-muted-foreground font-normal">{b.client_email}</div></td>
+                  <td className="p-3">{b.package_name}<div className="text-xs text-muted-foreground">{b.category ?? "—"}</div></td>
+                  <td className="p-3 text-right font-semibold text-primary">R{Number(b.final_price).toLocaleString()}</td>
+                </tr>
+              ))}
+              {completed.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">No completed bookings yet. Mark active ones complete when sessions wrap.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
+
 
 // ─────────── Confirm Booking Dialog ───────────
 function ConfirmDialog({ inquiry, packages, onClose, onDone }: { inquiry: any; packages: any[]; onClose: () => void; onDone: () => void }) {
