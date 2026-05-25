@@ -442,14 +442,28 @@ function Admin() {
 }
 
 // ─────────── KPI / Empty ───────────
-function KPI({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: string; accent?: boolean }) {
+function KPI({ icon, label, value, accent, tone, hint }: {
+  icon: React.ReactNode; label: string; value: string; accent?: boolean;
+  tone?: "loss" | "good" | "neutral"; hint?: string;
+}) {
+  const toneCls = tone === "loss"
+    ? "border-destructive/60 bg-destructive/10"
+    : tone === "good"
+    ? "border-primary/40"
+    : "";
+  const valueCls = tone === "loss"
+    ? "text-destructive"
+    : accent
+    ? "text-gradient-warm"
+    : "";
   return (
-    <div className={`panel p-4 ${accent ? "border-primary/40" : ""}`}>
+    <div className={`panel p-4 ${accent && tone !== "loss" ? "border-primary/40" : ""} ${toneCls}`}>
       <div className="flex items-center justify-between text-muted-foreground">
         <span className="text-xs uppercase tracking-wider">{label}</span>
-        <span className={accent ? "text-primary" : ""}>{icon}</span>
+        <span className={tone === "loss" ? "text-destructive" : accent ? "text-primary" : ""}>{icon}</span>
       </div>
-      <div className={`mt-2 font-display text-2xl font-bold ${accent ? "text-gradient-warm" : ""}`}>{value}</div>
+      <div className={`mt-2 font-display text-2xl font-bold ${valueCls}`}>{value}</div>
+      {hint && <div className={`text-[11px] mt-1 ${tone === "loss" ? "text-destructive" : "text-muted-foreground"}`}>{hint}</div>}
     </div>
   );
 }
