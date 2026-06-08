@@ -12,8 +12,12 @@ import {
 import {
   Calendar, DollarSign, Inbox, TrendingUp, Users, CheckCircle2, Clock, Star,
   Image as ImageLucide, Tag, Trash2, Plus, Target, Percent, Activity, Wallet,
-  Bell, Fuel, UserPlus, Receipt, X, TrendingDown, PiggyBank,
+  Bell, Fuel, UserPlus, Receipt, X, TrendingDown, PiggyBank, CalendarDays,
+  MessageCircle, CreditCard, ChevronDown,
 } from "lucide-react";
+import { PackagesTab } from "@/components/admin/PackagesTab";
+import { AvailabilityTab } from "@/components/admin/AvailabilityTab";
+import { TEMPLATES, waLink, type BookingForTemplate } from "@/lib/whatsappTemplates";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Admin — Trope Photography" }] }),
@@ -21,7 +25,8 @@ export const Route = createFileRoute("/admin")({
 });
 
 const PIE_COLORS = ["#c4f04a", "#ff8a65", "#ffb74d", "#7c9cff", "#e879f9", "#34d399", "#fb7185"];
-type Tab = "overview" | "bookings" | "finance" | "alerts" | "packages" | "hero" | "gallery" | "promo";
+
+type Tab = "overview" | "bookings" | "finance" | "alerts" | "packages" | "availability" | "reviews" | "hero" | "gallery" | "promo";
 
 function Admin() {
   const { user, isAdmin, loading } = useAuth();
@@ -200,12 +205,16 @@ function Admin() {
     </Layout>
   );
 
+  const pendingReviews = testimonials.filter((t: any) => t.is_approved === false).length;
+  const awaitingDeposits = bookings.filter((b: any) => b.deposit_status === "awaiting" || !b.deposit_status).length;
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: "overview", label: "Overview" },
     { id: "bookings", label: "Bookings", badge: stats.newCount || undefined },
     { id: "finance", label: "Finance" },
     { id: "alerts", label: "Alerts", badge: unreadAlerts || undefined },
     { id: "packages", label: "Packages" },
+    { id: "availability", label: "Availability" },
+    { id: "reviews", label: "Reviews", badge: pendingReviews || undefined },
     { id: "hero", label: "Hero" },
     { id: "gallery", label: "Gallery" },
     { id: "promo", label: "Promo" },
@@ -245,6 +254,12 @@ function Admin() {
               <KPI icon={<Percent size={18}/>} label="Avg margin" value={`${stats.margin.toFixed(1)}%`}
                 tone={stats.margin < 0 ? "loss" : stats.margin > 30 ? "good" : "neutral"} />
               <KPI icon={<DollarSign size={18}/>} label="Net revenue" value={`R${stats.netRevenue.toLocaleString()}`} />
+              <KPI icon={<CreditCard size={18}/>} label="Awaiting deposits"
+                value={awaitingDeposits.toString()}
+                tone={awaitingDeposits > 0 ? "neutral" : "good"}
+                hint={awaitingDeposits > 0 ? "Bookings without deposit received" : "All caught up"} />
+              <KPI icon={<Wallet size={18}/>} label="Deposits this month"
+                value={`R${bookings.filter(b => b.deposit_received_at && new Date(b.deposit_received_at).getMonth() === new Date().getMonth()).reduce((s, b) => s + Number(b.final_price)/2, 0).toLocaleString()}`} />
               <KPI icon={<TrendingDown size={18}/>} label="Expenses" value={`R${stats.totalExpenses.toLocaleString()}`} />
               <KPI icon={<Tag size={18}/>} label="Discount impact" value={`-R${stats.totalDiscounts.toLocaleString()} (${stats.discountImpact.toFixed(1)}%)`} />
               <KPI icon={<Target size={18}/>} label="Avg order value" value={`R${Math.round(stats.aov).toLocaleString()}`} />
@@ -376,35 +391,9 @@ function Admin() {
         {tab === "finance" && <FinanceTab bookings={bookings} expenses={expenses} expensesByBooking={expensesByBooking} stats={stats} qc={qc} />}
         {tab === "alerts" && <AlertsTab notifications={notifications} qc={qc} />}
 
-        {tab === "packages" && (
-          <div className="mt-8 panel overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-muted-foreground border-b border-border">
-                <tr><th className="text-left p-3">Category</th><th className="text-left p-3">Name</th><th className="text-left p-3">Price (R)</th><th className="text-left p-3">Cover image</th><th className="text-left p-3">Video URL</th><th className="text-left p-3">Active</th><th className="text-left p-3">Popular</th></tr>
-              </thead>
-              <tbody>
-                {packages.map(p => (
-                  <tr key={p.id} className="border-b border-border/50">
-                    <td className="p-3">{p.category}</td>
-                    <td className="p-3 font-semibold">{p.name}</td>
-                    <td className="p-3"><input type="number" defaultValue={p.price as number} onBlur={e => { const v = Number(e.target.value); if (v !== Number(p.price)) updatePackageField(p.id, { price: v }); }} className="bg-input border border-border rounded px-2 py-1 w-24" /></td>
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        {p.cover_image_url && <img src={p.cover_image_url} alt="" className="w-10 h-10 rounded object-cover" />}
-                        <input defaultValue={p.cover_image_url ?? ""} onBlur={e => { if (e.target.value !== (p.cover_image_url ?? "")) updatePackageField(p.id, { cover_image_url: e.target.value || null }); }} className="bg-input border border-border rounded px-2 py-1 w-48 text-xs" placeholder="https://..." />
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <input defaultValue={(p as any).video_url ?? ""} onBlur={e => { if (e.target.value !== ((p as any).video_url ?? "")) updatePackageField(p.id, { video_url: e.target.value || null }); }} className="bg-input border border-border rounded px-2 py-1 w-48 text-xs" placeholder="YouTube/Vimeo/MP4 URL" />
-                    </td>
-                    <td className="p-3"><input type="checkbox" checked={p.is_active} onChange={e => togglePackage(p.id, "is_active", e.target.checked)} /></td>
-                    <td className="p-3"><input type="checkbox" checked={p.is_popular} onChange={e => togglePackage(p.id, "is_popular", e.target.checked)} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {tab === "packages" && <PackagesTab />}
+        {tab === "availability" && <AvailabilityTab />}
+        {tab === "reviews" && <ReviewsTab testimonials={testimonials} qc={qc} />}
 
         {tab === "hero" && <HeroManager hero={hero} qc={qc} />}
         {tab === "gallery" && <GalleryManager gallery={gallery} qc={qc} />}
@@ -502,7 +491,7 @@ function BookingsTab({ inquiries, bookings, setConfirmFor, updateStatus, refresh
               </div>
               <table className="w-full text-sm">
                 <thead className="text-xs uppercase text-muted-foreground border-b border-border">
-                  <tr><th className="text-left p-3">Date</th><th className="text-left p-3">Client</th><th className="text-left p-3">Package</th><th className="text-left p-3">Session</th><th className="text-right p-3">Revenue</th><th className="text-right p-3">Action</th></tr>
+                  <tr><th className="text-left p-3">Date</th><th className="text-left p-3">Client</th><th className="text-left p-3">Package</th><th className="text-left p-3">Session</th><th className="text-left p-3">Payment</th><th className="text-right p-3">Revenue</th><th className="text-right p-3">Actions</th></tr>
                 </thead>
                 <tbody>
                   {active.map(b => (
@@ -510,12 +499,16 @@ function BookingsTab({ inquiries, bookings, setConfirmFor, updateStatus, refresh
                       <td className="p-3 text-muted-foreground whitespace-nowrap">{new Date(b.confirmed_at).toLocaleDateString()}</td>
                       <td className="p-3 font-semibold">{b.client_name}<div className="text-xs text-muted-foreground font-normal">{b.client_email}</div></td>
                       <td className="p-3">{b.package_name}</td>
-                      <td className="p-3 text-muted-foreground">{b.session_date ?? "—"}</td>
+                      <td className="p-3 text-muted-foreground">{b.session_date ?? "—"}{b.session_time ? ` · ${String(b.session_time).slice(0,5)}` : ""}</td>
+                      <td className="p-3"><DepositControls booking={b} onRefresh={() => refresh("all-bookings")} /></td>
                       <td className="p-3 text-right font-semibold">R{Number(b.final_price).toLocaleString()}</td>
                       <td className="p-3 text-right">
-                        <button onClick={() => markComplete(b.id)} className="btn-lime px-3 py-1.5 rounded text-xs font-semibold inline-flex items-center gap-1">
-                          <CheckCircle2 size={12}/> Mark completed
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <WhatsAppMessageMenu booking={b} />
+                          <button onClick={() => markComplete(b.id)} className="btn-lime px-3 py-1.5 rounded text-xs font-semibold inline-flex items-center gap-1">
+                            <CheckCircle2 size={12}/> Complete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1002,6 +995,129 @@ function PromoManager({ promo, qc }: { promo: any; qc: any }) {
           {promo && <button onClick={remove} className="px-4 py-2 rounded text-sm text-destructive border border-destructive/40 hover:bg-destructive/10 inline-flex items-center gap-1"><Trash2 size={14}/> Delete</button>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─────────── Reviews moderation ───────────
+function ReviewsTab({ testimonials, qc }: { testimonials: any[]; qc: any }) {
+  const refresh = () => qc.invalidateQueries({ queryKey: ["all-testimonials"] });
+  const approve = async (id: string) => { await supabase.from("testimonials").update({ is_approved: true }).eq("id", id); refresh(); toast.success("Approved"); };
+  const remove = async (id: string) => { if (!confirm("Delete review?")) return; await supabase.from("testimonials").delete().eq("id", id); refresh(); };
+
+  const pending = testimonials.filter((t: any) => t.is_approved === false);
+  const approved = testimonials.filter((t: any) => t.is_approved !== false);
+
+  return (
+    <div className="mt-8 space-y-6">
+      <div className="panel p-6">
+        <h2 className="font-display text-xl font-bold mb-4 flex items-center gap-2"><Star size={18}/> Pending reviews <span className="text-sm font-normal text-muted-foreground">({pending.length})</span></h2>
+        {pending.length === 0 ? <Empty/> : (
+          <div className="space-y-3">
+            {pending.map(t => (
+              <div key={t.id} className="p-4 rounded-lg bg-secondary/40 border border-border">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="font-semibold">{t.client_name}</div>
+                      <div className="flex gap-0.5">{Array.from({ length: t.rating }).map((_, i) => <Star key={i} size={11} className="fill-primary text-primary" />)}</div>
+                    </div>
+                    {t.title && <div className="text-sm font-semibold mt-1">{t.title}</div>}
+                    <p className="text-sm text-muted-foreground mt-1">"{t.quote}"</p>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button onClick={() => approve(t.id)} className="btn-lime px-3 py-1.5 rounded text-xs font-semibold">Approve</button>
+                    <button onClick={() => remove(t.id)} className="text-muted-foreground hover:text-destructive p-1"><Trash2 size={13}/></button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="panel p-6">
+        <h2 className="font-display text-xl font-bold mb-4">Live reviews ({approved.length})</h2>
+        {approved.length === 0 ? <Empty/> : (
+          <div className="grid md:grid-cols-2 gap-3">
+            {approved.map(t => (
+              <div key={t.id} className="p-4 rounded-lg bg-secondary/30 border border-border">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm">{t.client_name}</span>
+                    <div className="flex gap-0.5">{Array.from({ length: t.rating }).map((_, i) => <Star key={i} size={10} className="fill-primary text-primary" />)}</div>
+                  </div>
+                  <button onClick={() => remove(t.id)} className="text-muted-foreground hover:text-destructive"><Trash2 size={12}/></button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">"{t.quote}"</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────── WhatsApp template dropdown for booking cards ───────────
+export function WhatsAppMessageMenu({ booking }: { booking: BookingForTemplate & { id: string; client_whatsapp?: string | null } }) {
+  const [open, setOpen] = useState(false);
+  const [preview, setPreview] = useState<{ label: string; text: string } | null>(null);
+  return (
+    <div className="relative inline-block">
+      <button onClick={() => setOpen(o => !o)} className="px-2.5 py-1.5 rounded text-xs border border-border hover:border-primary inline-flex items-center gap-1 bg-secondary/60">
+        <MessageCircle size={12}/> Message client <ChevronDown size={11}/>
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 w-56 z-20 bg-popover border border-border rounded-md shadow-lg overflow-hidden">
+          {TEMPLATES.map(t => (
+            <button key={t.key} onClick={() => { setPreview({ label: t.label, text: t.build(booking, { galleryUrl: `${window.location.origin}/dashboard` }).replace("{BOOKING_ID}", booking.id) }); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-xs hover:bg-secondary border-b border-border/50 last:border-0">{t.label}</button>
+          ))}
+        </div>
+      )}
+      {preview && (
+        <div className="fixed inset-0 z-50 bg-black/70 grid place-items-center p-4" onClick={() => setPreview(null)}>
+          <div className="panel p-6 max-w-md w-full" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-display text-lg font-bold">{preview.label}</h3>
+              <button onClick={() => setPreview(null)}><X size={16}/></button>
+            </div>
+            <textarea value={preview.text} onChange={e => setPreview({ ...preview, text: e.target.value })} rows={10}
+              className="w-full bg-input border border-border rounded p-3 text-sm font-mono" />
+            <div className="flex gap-2 justify-end mt-3">
+              <button onClick={() => setPreview(null)} className="text-xs text-muted-foreground px-3 py-2">Cancel</button>
+              <a href={waLink(booking.client_whatsapp, preview.text)} target="_blank" rel="noreferrer" onClick={() => setPreview(null)}
+                className="btn-lime px-4 py-2 rounded text-xs font-semibold inline-flex items-center gap-1.5">
+                <MessageCircle size={12}/> Send via WhatsApp
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────── Deposit status badge & buttons ───────────
+export function DepositControls({ booking, onRefresh }: { booking: any; onRefresh: () => void }) {
+  const status = booking.deposit_status ?? "awaiting";
+  const update = async (next: string) => {
+    const patch: any = { deposit_status: next };
+    if (next === "deposit_received") patch.deposit_received_at = new Date().toISOString();
+    if (next === "fully_paid") patch.fully_paid_at = new Date().toISOString();
+    const { error } = await supabase.from("bookings").update(patch).eq("id", booking.id);
+    if (error) toast.error(error.message); else { toast.success("Updated"); onRefresh(); }
+  };
+  const badge = status === "fully_paid" ? "bg-blue-500/20 text-blue-300" : status === "deposit_received" ? "bg-green-500/20 text-green-300" : "bg-orange-500/20 text-orange-300";
+  const label = status === "fully_paid" ? "Fully paid" : status === "deposit_received" ? "Deposit received" : "Awaiting payment";
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <span className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded-full inline-flex items-center gap-1 ${badge}`}>
+        <CreditCard size={10}/> {label}
+      </span>
+      {status === "awaiting" && <button onClick={() => update("deposit_received")} className="text-[10px] px-2 py-1 rounded bg-green-500/20 text-green-300 hover:bg-green-500/30">Mark deposit ✓</button>}
+      {status === "deposit_received" && <button onClick={() => update("fully_paid")} className="text-[10px] px-2 py-1 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/30">Mark fully paid ✓</button>}
     </div>
   );
 }

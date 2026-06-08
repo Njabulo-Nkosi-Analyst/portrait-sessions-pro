@@ -1,63 +1,91 @@
-## Build plan — 5 sections, sequenced across 3 turns
 
-Given the scope, I'll ship in three focused turns so each piece is testable before the next.
+# Trope Photography — Major Upgrade Plan
 
-### Turn 1 — Foundation: DB + Sections 3 & 4 (this turn)
+This is a large, multi-feature build. I'll do it in clearly separated phases so you can review progress at each stage. Total estimated scope: ~15 new/modified files, 1 large DB migration, 2 new Storage buckets.
 
-**Database migration** adds the tables/columns everything else needs:
-- `packages.video_url` (text) — for category video hero
-- `hero_images.video_url` (text, nullable) — videos can replace images on hero too
-- `bookings` table — confirmed inquiries become bookings; tracks `confirmed_at`, `package_price`, `discount_amount`, `discount_reason`, `final_price`, `status` (confirmed/completed/cancelled)
-- `booking_expenses` table — per-booking line items: `type` (petrol/wage/other), `km`, `rate_per_km`, `amount`, `note`
-- `quotes` table — for the instant quote calculator (Section 5)
-- `client_gallery_access` table — token-based private gallery links (Section 5)
-- `reviews` table — collected from gallery portal
-- `notifications` table — admin notification feed
-- `availability_blocks` table — for self-booking calendar
-- RLS policies on all new tables
+---
 
-**Section 3 — Booking Confirmation** (`admin.tsx`):
-- "Confirm Booking" button on each new/contacted inquiry → opens dialog
-- Dialog: confirms package price, optional discount amount + reason
-- On confirm: creates `bookings` row, sets inquiry status to "booked"
-- New KPI: **Discount Impact** (total discounts given, % of gross revenue lost)
-- KPIs auto-recalc from bookings table (revenue uses `final_price` not package list price)
+## Phase 1 — Database & Storage Foundation
 
-**Section 4 — Finance Tracker** (new component, embedded in admin bookings tab):
-- Each confirmed booking gets an expandable "Finances" panel:
-  - **Petrol**: km input + rate/km (default R2.50) → auto-calc amount
-  - **Wages**: assistant name + amount per booking
-  - **Other costs**: free-form line items
-- Live calculation: `Money Left = final_price - sum(expenses)`
-- Big highlighted "Money Left After This Booking" card per booking
-- New admin KPI: **Net Profit (30d)**, **Avg Margin %**, **Top Expense Category**
+One migration adding all schema changes + RLS:
 
-### Turn 2 — Sections 1 & 2
+- `packages`: add `media_url`, `media_type`, `sort_order` (exists), `category_sort_order`
+- `bookings`: add `deposit_status`, `deposit_received_at`, `fully_paid_at`, `promo_code`, `promo_discount`
+- New `promo_codes` table + RLS (anon SELECT active codes, admin full)
+- New `client_galleries` table + RLS (owner read, admin full)
+- `site_settings`: seed `working_days` + `default_slots` keys
+- Helper SQL function `get_booked_slots(date)` returning booked time strings (derived from `bookings`, status IN pending/confirmed/completed)
+- Enable Realtime on `bookings` for client slot updates
+- Storage buckets: `package-media` (public), `client-galleries` (private, RLS by booking owner)
 
-**Section 1 — Categories video hero + favourites**:
-- Admin: video URL field per package (YouTube/Vimeo/MP4 link)
-- Gallery: tab switcher per category — Photos | Video
-- Heart button on each gallery image → saves to `localStorage` favourites
-- New `/favourites` route showing saved items with "Book a shoot like this" CTA
+## Phase 2 — Admin Pricing Table (Section 1)
 
-**Section 2 — Pages & Contact polish**:
-- Unified visual language across Gallery, Pricing, Contact (shared section header component)
-- Contact redesign: split layout (form left, trust column right with badges: "24h response", "150+ shoots", "5★ rated", payment icons)
-- Animated "Response time: ~2 hours" indicator on contact page
-- Sticky "Book Now" bar on mobile across all pages
+New component `AdminPackagesTable.tsx` inside admin dashboard Packages tab:
 
-### Turn 3 — Section 5 Premium features
+- Grouped by category with section dividers
+- Inline-editable cells (click-to-edit pattern using contentEditable-style inputs)
+- Add Row / Duplicate / Delete (with confirm) / Drag handle (using `@dnd-kit/sortable`)
+- Popular + Active toggles
+- Media upload cell → uploads to `package-media/{package-id}` bucket, shows thumb or video preview
+- Per-row Save + bulk "Save all"
+- Search/filter bar
+- "Add new category" modal (categories live as distinct `category` text values; ordering via `category_sort_order` on packages)
+- Promo Codes mini-table under packages (Feature E admin side)
 
-- **Self-booking calendar**: `/book` route with date picker showing `availability_blocks`; client picks slot + package → creates pending booking
-- **Instant quote calculator**: `/quote` route — type, hours, location, extras → instant price
-- **Private client gallery portal**: `/gallery/$token` route — clients view their shoot, download, leave review
-- **Admin notifications center**: bell icon in admin navbar with unread count; new inquiries/bookings/reviews appear here
+## Phase 3 — Public Pricing Page (Section 1 client-side)
 
-### Technical notes
-- All money in ZAR (R), stored as `numeric(10,2)`
-- Bookings derived from inquiries via FK `inquiry_id` (nullable for direct bookings via self-booking)
-- Finance calculations done client-side from `booking_expenses` rows (no triggers)
-- Notifications via Supabase realtime channel on `notifications` table
-- Video URLs: support YouTube/Vimeo embeds (detected by URL) + direct MP4 fallback via `<video>` tag
+Rewrite `src/routes/pricing.tsx`:
 
-Starting Turn 1 once you approve.
+- Category sections in `category_sort_order`
+- Card header shows media: image (16:9 cover) | autoplay-muted-loop video (poster on mobile) | gradient + icon fallback
+- Existing popular/price/features layout preserved below media
+
+## Phase 4 — Availability (Section 2)
+
+Admin Availability tab gets a new `WeeklySchedulePanel` above the calendar:
+
+- 7 day toggles + per-day default slot editor
+- "Save weekly schedule" → writes to `site_settings`
+- "Apply to next 60 days" → bulk inserts into `availability_blocks` for missing dates
+- Monthly calendar gains dot indicators (green available, blue booked, red blocked) and greys out off-weekday columns
+- Per-date override panel (preserves existing manual override behaviour)
+
+Client booking date picker:
+
+- Greys past, off-weekdays (via `working_days`), manually blocked, and fully-booked dates
+- Time slots render as pills with three states (available/booked/selected)
+- Supabase realtime subscription on `bookings` filtered by selected date to update slot states live
+
+## Phase 5 — Growth Features
+
+- **A. Quote Calculator** — new `<QuoteCalculator />` component, embedded on home (between featured work + testimonials) and as `/quote` route
+- **B. Review Portal** — public route `/review/$bookingId`, no auth, writes to `testimonials` with `is_approved=false` and links `booking_id`
+- **C. Client Galleries** — admin "Client Galleries" sub-tab in admin Gallery tab + "My Gallery" tab in user dashboard; download-all via `jszip`
+- **D. Deposit Tracking** — booking card buttons + 2 KPI cards in admin Overview
+- **E. Promo Codes** — collapsible field in booking flow step 2, validates against `promo_codes`, updates running total, increments `uses_count` on booking save
+- **F. WhatsApp Templates** — "Message client" dropdown per booking card; preview modal with editable text; opens `wa.me/<phone>?text=<encoded>`
+
+## Phase 6 — QA & Verification
+
+- Run linter, check build, verify routes register, test one booking → slot lock end-to-end
+- Add `testimonials.booking_id` column if missing (used by review portal)
+
+---
+
+## Technical Notes
+
+- Storage RLS: `package-media` public-read, admin-write. `client-galleries` private; SELECT policy joins `bookings.user_id = auth.uid()`.
+- All new tables get explicit `GRANT` statements per project rules.
+- New deps: `@dnd-kit/core`, `@dnd-kit/sortable`, `jszip`, `file-saver` (small, edge-safe).
+- The uploaded PDF (`temp_1780865125590-compressed.pdf`) isn't referenced in the spec — I'll ignore it unless you want it used somewhere.
+
+---
+
+## Order of Execution
+
+1. Migration (you approve before it runs)
+2. Storage buckets
+3. Code in phases 2 → 5
+4. Final QA pass
+
+This will take multiple turns. Shall I start with the migration?

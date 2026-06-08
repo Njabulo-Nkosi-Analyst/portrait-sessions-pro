@@ -93,15 +93,21 @@ export type Database = {
           client_whatsapp: string | null
           confirmed_at: string
           created_at: string
+          deposit_received_at: string | null
+          deposit_status: string
           discount_amount: number
           discount_reason: string | null
           final_price: number
+          fully_paid_at: string | null
           id: string
           inquiry_id: string | null
           notes: string | null
           package_name: string | null
           package_price: number
+          promo_code: string | null
+          promo_discount: number
           session_date: string | null
+          session_time: string | null
           status: string
           user_id: string | null
         }
@@ -112,15 +118,21 @@ export type Database = {
           client_whatsapp?: string | null
           confirmed_at?: string
           created_at?: string
+          deposit_received_at?: string | null
+          deposit_status?: string
           discount_amount?: number
           discount_reason?: string | null
           final_price?: number
+          fully_paid_at?: string | null
           id?: string
           inquiry_id?: string | null
           notes?: string | null
           package_name?: string | null
           package_price?: number
+          promo_code?: string | null
+          promo_discount?: number
           session_date?: string | null
+          session_time?: string | null
           status?: string
           user_id?: string | null
         }
@@ -131,15 +143,21 @@ export type Database = {
           client_whatsapp?: string | null
           confirmed_at?: string
           created_at?: string
+          deposit_received_at?: string | null
+          deposit_status?: string
           discount_amount?: number
           discount_reason?: string | null
           final_price?: number
+          fully_paid_at?: string | null
           id?: string
           inquiry_id?: string | null
           notes?: string | null
           package_name?: string | null
           package_price?: number
+          promo_code?: string | null
+          promo_discount?: number
           session_date?: string | null
+          session_time?: string | null
           status?: string
           user_id?: string | null
         }
@@ -149,6 +167,50 @@ export type Database = {
             columns: ["inquiry_id"]
             isOneToOne: false
             referencedRelation: "inquiries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_galleries: {
+        Row: {
+          admin_message: string | null
+          booking_id: string | null
+          created_at: string
+          id: string
+          image_urls: Json
+          is_published: boolean
+          title: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          admin_message?: string | null
+          booking_id?: string | null
+          created_at?: string
+          id?: string
+          image_urls?: Json
+          is_published?: boolean
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          admin_message?: string | null
+          booking_id?: string | null
+          created_at?: string
+          id?: string
+          image_urls?: Json
+          is_published?: boolean
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_galleries_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
             referencedColumns: ["id"]
           },
         ]
@@ -366,42 +428,57 @@ export type Database = {
       }
       packages: {
         Row: {
+          additional_hour_rate: number | null
           category: string
+          category_sort_order: number
           cover_image_url: string | null
           created_at: string
+          deliverables: string | null
           duration: string
           features: Json
           id: string
           is_active: boolean
           is_popular: boolean
+          media_type: string | null
+          media_url: string | null
           name: string
           price: number
           sort_order: number
           video_url: string | null
         }
         Insert: {
+          additional_hour_rate?: number | null
           category: string
+          category_sort_order?: number
           cover_image_url?: string | null
           created_at?: string
+          deliverables?: string | null
           duration: string
           features?: Json
           id?: string
           is_active?: boolean
           is_popular?: boolean
+          media_type?: string | null
+          media_url?: string | null
           name: string
           price: number
           sort_order?: number
           video_url?: string | null
         }
         Update: {
+          additional_hour_rate?: number | null
           category?: string
+          category_sort_order?: number
           cover_image_url?: string | null
           created_at?: string
+          deliverables?: string | null
           duration?: string
           features?: Json
           id?: string
           is_active?: boolean
           is_popular?: boolean
+          media_type?: string | null
+          media_url?: string | null
           name?: string
           price?: number
           sort_order?: number
@@ -436,6 +513,45 @@ export type Database = {
           phone?: string | null
           updated_at?: string
           whatsapp?: string | null
+        }
+        Relationships: []
+      }
+      promo_codes: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          discount_type: string
+          discount_value: number
+          expiry_date: string | null
+          id: string
+          is_active: boolean
+          max_uses: number | null
+          uses_count: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          discount_type: string
+          discount_value: number
+          expiry_date?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          uses_count?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          discount_type?: string
+          discount_value?: number
+          expiry_date?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          uses_count?: number
         }
         Relationships: []
       }
@@ -576,30 +692,50 @@ export type Database = {
       }
       testimonials: {
         Row: {
+          booking_id: string | null
           category: string | null
           client_name: string
           created_at: string
           id: string
+          is_approved: boolean
+          photo_url: string | null
           quote: string
           rating: number
+          title: string | null
         }
         Insert: {
+          booking_id?: string | null
           category?: string | null
           client_name: string
           created_at?: string
           id?: string
+          is_approved?: boolean
+          photo_url?: string | null
           quote: string
           rating?: number
+          title?: string | null
         }
         Update: {
+          booking_id?: string | null
           category?: string | null
           client_name?: string
           created_at?: string
           id?: string
+          is_approved?: boolean
+          photo_url?: string | null
           quote?: string
           rating?: number
+          title?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "testimonials_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {

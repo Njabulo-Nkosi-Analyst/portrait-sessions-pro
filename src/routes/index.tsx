@@ -6,7 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { ArrowRight, Play, Star, Phone, MessageCircle, Instagram, Mail } from "lucide-react";
+import { QuoteCalculator } from "@/components/QuoteCalculator";
+import { ArrowRight, Play, Star, Phone, MessageCircle, Instagram } from "lucide-react";
 
 const FALLBACK_HERO = [
   { id: "1", url: "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1600&q=80", category_label: "Weddings" },
@@ -31,7 +32,7 @@ export const Route = createFileRoute("/")({
 function Home() {
   const { data: testimonials = [] } = useQuery({
     queryKey: ["testimonials"],
-    queryFn: async () => (await supabase.from("testimonials").select("*").limit(3)).data ?? [],
+    queryFn: async () => (await supabase.from("testimonials").select("*").eq("is_approved", true).limit(3)).data ?? [],
   });
 
   const { data: hero = FALLBACK_HERO } = useQuery({
@@ -134,6 +135,9 @@ function Home() {
         </div>
       </section>
 
+      {/* Quote Calculator */}
+      <QuoteCalculator embedded />
+
       {/* Testimonials */}
       <section className="max-w-7xl mx-auto px-5 lg:px-8 mt-24">
         <span className="eyebrow">Testimonial</span>
@@ -172,8 +176,8 @@ function Home() {
   <a href="https://wa.me/27714967968" target="_blank" rel="noreferrer" className="flex flex-col items-center gap-1.5 py-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors text-xs">
     <MessageCircle size={16} className="text-primary"/>071 496 7968
   </a>
-  <a href="https://instagram.com/tann_photography_" target="_blank" rel="noreferrer" className="flex flex-col items-center gap-1.5 py-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors text-xs">
-    <Instagram size={16} className="text-primary"/>@tann_photography_
+  <a href="https://instagram.com/trope_photography_" target="_blank" rel="noreferrer" className="flex flex-col items-center gap-1.5 py-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors text-xs">
+    <Instagram size={16} className="text-primary"/>@trope_photography_
   </a>
 </div>
           </div>
