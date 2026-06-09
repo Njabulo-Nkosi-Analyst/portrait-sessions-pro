@@ -280,6 +280,16 @@ function Contact() {
               <button disabled={isSubmitting} className="btn-lime px-6 py-3 rounded-md text-sm disabled:opacity-50">
                 {isSubmitting ? "Sending..." : "Send inquiry"}
               </button>
+
+              <div className="mt-4 pt-4 border-t border-border space-y-3 text-xs text-muted-foreground">
+                <div className="panel p-4 bg-primary/5 border-primary/30">
+                  <div className="font-semibold text-foreground mb-1 text-sm">Payment</div>
+                  FNB · W. Maluleka · Acc No. 63052599968
+                </div>
+                <p className="leading-relaxed">
+                  <span className="font-semibold text-foreground">Terms:</span> 50% deposit secures your booking. Balance due on completion. Standard turnaround: 4–5 working days. Next-day express: +R1,000. Travel free within 20km of Durban.
+                </p>
+              </div>
             </form>
 
             <aside className="space-y-4">

@@ -24,7 +24,7 @@ export const Route = createFileRoute("/admin")({
   component: Admin,
 });
 
-const PIE_COLORS = ["#c4f04a", "#ff8a65", "#ffb74d", "#7c9cff", "#e879f9", "#34d399", "#fb7185"];
+const PIE_COLORS = ["#E8241A", "#ff8a65", "#ffb74d", "#7c9cff", "#e879f9", "#34d399", "#fb7185"];
 
 type Tab = "overview" | "bookings" | "finance" | "alerts" | "packages" | "availability" | "reviews" | "hero" | "gallery" | "promo";
 
