@@ -36,32 +36,29 @@
 
 :root {
   --radius: 0.75rem;
-  --background: #0A0A0A;
-  --foreground: oklch(0.98 0 0);
-  --card: oklch(0.10 0 0);
-  --card-foreground: oklch(0.98 0 0);
-  --popover: oklch(0.10 0 0);
-  --popover-foreground: oklch(0.98 0 0);
-  --primary: #384b5f;
-  --primary-foreground: #FFFFFF;
-  --secondary: oklch(0.16 0 0);
-  --secondary-foreground: oklch(0.98 0 0);
-  --muted: oklch(0.14 0 0);
-  --muted-foreground: oklch(0.70 0 0);
-  --accent: oklch(0.18 0 0);
-  --accent-foreground: oklch(0.98 0 0);
-  --destructive: #384b5f;
-  --destructive-foreground: #FFFFFF;
-  --border: rgba(255,255,255,0.06);
-  --input: oklch(0.16 0 0);
-  --ring: #384b5f;
-
-  --trope-red: #E8241A;
-
-  --gradient-warm: linear-gradient(110deg, #384b5f 0%,  #3d5166  100%);
-  --gradient-card: linear-gradient(180deg, oklch(0.11 0 0) 0%, oklch(0.08 0 0) 100%);
-  --shadow-glow: 0 20px 60px -20px rgba(44,62,80,0.45);
-
+  --background: #080808;
+  --foreground: #FFFFFF;
+  --card: #111111;
+  --card-foreground: #FFFFFF;
+  --popover: #111111;
+  --popover-foreground: #FFFFFF;
+  --primary: #C9A025;
+  --primary-foreground: #000000;
+  --secondary: #1A1A1A;
+  --secondary-foreground: #FFFFFF;
+  --muted: #141414;
+  --muted-foreground: rgba(255,255,255,0.45);
+  --accent: #1E1E1E;
+  --accent-foreground: #FFFFFF;
+  --destructive: #C9A025;
+  --destructive-foreground: #000000;
+  --border: rgba(255,255,255,0.08);
+  --input: #1A1A1A;
+  --ring: #C9A025;
+  --trope-red: #C9A025;
+  --gradient-warm: linear-gradient(110deg, #B8900E 0%, #E8C040 100%);
+  --gradient-card: linear-gradient(180deg, #141414 0%, #0A0A0A 100%);
+  --shadow-glow: 0 20px 60px -20px rgba(201,160,37,0.45);
   --font-display: "Bebas Neue", "Bricolage Grotesque", system-ui, sans-serif;
   --font-body: "DM Sans", "Plus Jakarta Sans", system-ui, sans-serif;
 }
@@ -115,19 +112,19 @@
   }
   .btn-lime {
     background: var(--trope-red);
-    color: #FFFFFF;
+    color: #000000;
     font-weight: 600;
     transition: all .2s ease;
   }
   .btn-lime:hover { box-shadow: var(--shadow-glow); transform: scale(1.02); }
   .btn-outline-light {
-    background: oklch(0.98 0 0);
-    color: oklch(0.10 0 0);
+    background: #FFFFFF;
+    color: #000000;
     font-weight: 600;
   }
   .btn-ghost-dark {
-    background: oklch(0.12 0 0);
-    color: oklch(0.98 0 0);
+    background: #111111;
+    color: #FFFFFF;
     border: 1px solid var(--border);
     font-weight: 600;
     transition: all .2s ease;
@@ -135,7 +132,7 @@
   .btn-ghost-dark:hover { transform: scale(1.02); border-color: var(--trope-red); }
   .section-divider {
     height: 1px;
-    background: rgba(232,36,26,0.4);
+    background: rgba(201,160,37,0.35);
     border: 0;
     margin: 0 auto;
     max-width: 80rem;
@@ -144,33 +141,58 @@
     animation: tropePulse 3s ease-in-out infinite;
   }
   @keyframes tropePulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(232,36,26,0.6); }
-    50% { box-shadow: 0 0 0 10px rgba(232,36,26,0); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(201,160,37,0.6); }
+    50% { box-shadow: 0 0 0 10px rgba(201,160,37,0); }
   }
 }
+
+/* ── LIGHT MODE ─────────────────────────────────── */
 html.light {
-  --background: #D4D4D4;
+  --background: #F5F5F0;
   --foreground: #0A0A0A;
   --card: #FFFFFF;
   --card-foreground: #0A0A0A;
   --popover: #FFFFFF;
   --popover-foreground: #0A0A0A;
-  --primary: #2C3E50;
+  --primary: #B8900E;
   --primary-foreground: #FFFFFF;
-  --secondary: #E8E8E8;
+  --secondary: #EFEFEB;
   --secondary-foreground: #0A0A0A;
-  --muted: #EFEFEF;
-  --muted-foreground: #555555;
-  --accent: #E0E0E0;
+  --muted: #EAEAE5;
+  --muted-foreground: #666660;
+  --accent: #E8E8E2;
   --accent-foreground: #0A0A0A;
-  --border: rgba(0,0,0,0.1);
-  --input: #E8E8E8;
-  --ring: #2C3E50;
-  --trope-red: #2C3E50;
-  --gradient-card: linear-gradient(180deg, #FFFFFF 0%, #F0F0F0 100%);
+  --border: rgba(184,144,14,0.25);
+  --input: #EFEFEB;
+  --ring: #B8900E;
+  --trope-red: #B8900E;
+  --gradient-card: linear-gradient(180deg, #FFFFFF 0%, #FAF9F6 100%);
+  --shadow-glow: 0 20px 60px -20px rgba(184,144,14,0.3);
 }
 
 html.light body {
-  background-color:#D4D4D4;
+  background-color: #F5F5F0;
+  color: #0A0A0A;
+}
+
+/* Gold bordered cards in light mode */
+html.light .panel {
+  border: 1.5px solid rgba(184,144,14,0.4);
+  box-shadow: 0 2px 16px rgba(184,144,14,0.08);
+}
+
+html.light .panel:hover {
+  border-color: rgba(184,144,14,0.7);
+  box-shadow: 0 4px 24px rgba(184,144,14,0.15);
+  transition: all 0.2s ease;
+}
+
+/* Subtle gold tint on section borders */
+html.light .border-border {
+  border-color: rgba(184,144,14,0.2);
+}
+
+/* Make stats numbers pop in light mode */
+html.light .font-display {
   color: #0A0A0A;
 }

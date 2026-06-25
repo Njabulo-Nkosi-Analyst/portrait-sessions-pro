@@ -39,8 +39,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Trope Photography — Your story in natural light" },
-      { name: "description", content: "Professional photographer in Durban, South Africa. Weddings, portraits, events, products, maternity, kids and corporate. Book your session today." },
+      { title: "Tann Media — Your moments, cinematically told" },
+      { name: "description", content: "Professional photography & videography in Gauteng, South Africa. Weddings, portraits, graduations, matric dances, events and more. Book your session today." },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -57,12 +57,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("theme") as "dark" | "light" | null;
     if (saved) setTheme(saved);
+    setMounted(true);
 
-    // Listen for theme changes from the navbar toggle
     const observer = new MutationObserver(() => {
       const current = document.documentElement.classList.contains("light") ? "light" : "dark";
       setTheme(current);
@@ -74,7 +75,14 @@ function RootShell({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={theme}>
       <head><HeadContent /></head>
-      <body>{children}<Scripts /></body>
+      <body>
+        {/* Block flash of old content until app is hydrated */}
+        {!mounted && (
+          <div className="fixed inset-0 z-[9999] bg-background" />
+        )}
+        {children}
+        <Scripts />
+      </body>
     </html>
   );
 }

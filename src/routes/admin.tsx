@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/lib/auth";
@@ -13,9 +13,10 @@ import {
   Calendar, DollarSign, Inbox, TrendingUp, Users, CheckCircle2, Clock, Star,
   Image as ImageLucide, Tag, Trash2, Plus, Target, Percent, Activity, Wallet,
   Bell, Fuel, UserPlus, Receipt, X, TrendingDown, PiggyBank, CalendarDays,
-  MessageCircle, CreditCard, ChevronDown,
+  MessageCircle, CreditCard, ChevronDown, Upload, Play, Video,
 } from "lucide-react";
 import { PackagesTab } from "@/components/admin/PackagesTab";
+import { uploadToCloudinary } from "@/lib/cloudinary";
 import { AvailabilityTab } from "@/components/admin/AvailabilityTab";
 import { TEMPLATES, waLink, type BookingForTemplate } from "@/lib/whatsappTemplates";
 
@@ -851,103 +852,440 @@ function AlertsTab({ notifications, qc }: { notifications: any[]; qc: any }) {
 
 // ─────────── Hero / Gallery / Promo Managers (unchanged from previous) ───────────
 function HeroManager({ hero, qc }: { hero: any[]; qc: any }) {
-  const [url, setUrl] = useState("");
   const [label, setLabel] = useState("");
-  const [videoUrl, setVideoUrl] = useState("");
+  const [progress, setProgress] = useState<number | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [uploadMode, setUploadMode] = useState<"file" | "url">("file");
+  const [urlInput, setUrlInput] = useState("");
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const add = async () => {
-    if (!url.trim() || !label.trim()) return toast.error("URL and label required");
-    const { error } = await supabase.from("hero_images").insert({ url, category_label: label, video_url: videoUrl || null, sort_order: (hero.at(-1)?.sort_order ?? 0) + 1 } as any);
-    if (error) toast.error(error.message); else { toast.success("Added"); setUrl(""); setLabel(""); setVideoUrl(""); qc.invalidateQueries({ queryKey: ["all-hero"] }); qc.invalidateQueries({ queryKey: ["hero-active"] }); }
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["all-hero"] });
+    qc.invalidateQueries({ queryKey: ["hero-images"] });
   };
+
+  const saveFromUrl = async () => {
+    if (!urlInput.trim() || !label.trim()) return toast.error("Label and URL required");
+    const { error } = await supabase.from("hero_images").insert({
+      url: urlInput, category_label: label,
+      sort_order: (hero.at(-1)?.sort_order ?? 0) + 1, is_active: true,
+    } as any);
+    if (error) toast.error(error.message);
+    else { toast.success("Added ✓"); setUrlInput(""); setLabel(""); invalidate(); }
+  };
+
+  const uploadFile = async (file: File) => {
+    if (!label.trim()) return toast.error("Enter a label first");
+    const isVideo = file.type.startsWith("video/");
+    setProgress(0); setUploading(file.name);
+    try {
+      const cloudUrl = await uploadToCloudinary(
+        file,
+        isVideo ? "tann-media/hero/videos" : "tann-media/hero",
+        setProgress
+      );
+      const { error } = await supabase.from("hero_images").insert({
+        url: cloudUrl, category_label: label,
+        video_url: isVideo ? cloudUrl : null,
+        sort_order: (hero.at(-1)?.sort_order ?? 0) + 1, is_active: true,
+      } as any);
+      if (error) toast.error(error.message);
+      else { toast.success("Hero image added ✓"); setLabel(""); invalidate(); }
+    } catch (err: any) {
+      toast.error(err.message ?? "Upload failed");
+    } finally { setProgress(null); setUploading(null); }
+  };
+
   const remove = async (id: string) => {
     if (!confirm("Delete this hero image?")) return;
     const { error } = await supabase.from("hero_images").delete().eq("id", id);
-    if (error) toast.error(error.message); else { toast.success("Deleted"); qc.invalidateQueries({ queryKey: ["all-hero"] }); }
+    if (error) toast.error(error.message);
+    else { toast.success("Deleted"); invalidate(); }
   };
-  const toggle = async (id: string, active: boolean) => {
+
+  const toggleActive = async (id: string, active: boolean) => {
     await supabase.from("hero_images").update({ is_active: active }).eq("id", id);
-    qc.invalidateQueries({ queryKey: ["all-hero"] });
+    invalidate();
+  };
+
+  const saveLabel = async (id: string) => {
+    if (!editLabel.trim()) return;
+    await supabase.from("hero_images").update({ category_label: editLabel }).eq("id", id);
+    setEditId(null); setEditLabel(""); invalidate(); toast.success("Label updated");
+  };
+
+  const moveOrder = async (id: string, currentOrder: number, dir: -1 | 1) => {
+    await supabase.from("hero_images").update({ sort_order: currentOrder + dir }).eq("id", id);
+    invalidate();
   };
 
   return (
     <div className="mt-8 space-y-6">
       <div className="panel p-6">
-        <h2 className="font-display text-xl font-bold mb-4 flex items-center gap-2"><ImageLucide size={18}/> Add a homepage hero image</h2>
-        <div className="grid md:grid-cols-2 gap-3">
-          <input value={url} onChange={e => setUrl(e.target.value)} placeholder="Image URL (https://...)" className="bg-input border border-border rounded px-3 py-2 text-sm" />
-          <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Category label (e.g. Weddings)" className="bg-input border border-border rounded px-3 py-2 text-sm" />
-          <input value={videoUrl} onChange={e => setVideoUrl(e.target.value)} placeholder="(Optional) Video URL — overrides image" className="bg-input border border-border rounded px-3 py-2 text-sm md:col-span-2" />
-          <button onClick={add} className="btn-lime px-4 py-2 rounded text-sm inline-flex items-center justify-center gap-1 md:col-span-2"><Plus size={14}/> Add hero</button>
+        <h2 className="font-display text-xl font-bold mb-1 flex items-center gap-2">
+          <ImageLucide size={18}/> Add hero image / video
+        </h2>
+        <p className="text-sm text-muted-foreground mb-5">
+          These appear as the rotating background on your homepage. Upload from device or paste a URL.
+        </p>
+
+        <div className="mb-4">
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">
+            Category label (shown on homepage)
+          </label>
+          <input value={label} onChange={e => setLabel(e.target.value)}
+            placeholder="e.g. Weddings, Events, Portraits"
+            className="w-full max-w-md bg-input border border-border rounded px-3 py-2 text-sm" />
         </div>
-      </div>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {hero.map(h => (
-          <div key={h.id} className="panel overflow-hidden">
-            <div className="aspect-video bg-secondary"><img src={h.url} alt={h.category_label} className="w-full h-full object-cover" /></div>
-            <div className="p-3 flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="font-semibold text-sm truncate">{h.category_label}</div>
-                <label className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1">
-                  <input type="checkbox" checked={h.is_active} onChange={e => toggle(h.id, e.target.checked)} /> Active
-                </label>
-                {(h as any).video_url && <div className="text-[10px] text-primary mt-1">▶ Video</div>}
+
+        <div className="flex gap-1 p-1 bg-secondary rounded-full w-fit mb-4">
+          <button onClick={() => setUploadMode("file")}
+            className={`px-4 py-1.5 rounded-full text-xs transition-all ${uploadMode === "file" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground"}`}>
+            Upload from device
+          </button>
+          <button onClick={() => setUploadMode("url")}
+            className={`px-4 py-1.5 rounded-full text-xs transition-all ${uploadMode === "url" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground"}`}>
+            Paste URL
+          </button>
+        </div>
+
+        {uploadMode === "file" ? (
+          <div>
+            <input ref={fileRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm"
+              className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); }} />
+            {progress !== null ? (
+              <div className="w-full max-w-sm">
+                <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
+                  <span className="truncate">{uploading}</span><span>{progress}%</span>
+                </div>
+                <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                  <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+                </div>
               </div>
-              <button onClick={() => remove(h.id)} className="text-destructive p-2 hover:bg-destructive/10 rounded"><Trash2 size={16}/></button>
+            ) : (
+              <button onClick={() => { if (!label.trim()) return toast.error("Enter a label first"); fileRef.current?.click(); }}
+                className="w-full max-w-md border-2 border-dashed border-border hover:border-primary rounded-xl py-10 text-center transition-colors group">
+                <Upload size={28} className="mx-auto mb-2 text-muted-foreground group-hover:text-primary" />
+                <div className="text-sm font-semibold text-muted-foreground group-hover:text-foreground">
+                  Click to upload image or video
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">JPG, PNG, WEBP, MP4</div>
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex gap-2 max-w-md">
+            <input value={urlInput} onChange={e => setUrlInput(e.target.value)}
+              placeholder="https://..." className="flex-1 bg-input border border-border rounded px-3 py-2 text-sm" />
+            <button onClick={saveFromUrl} className="btn-lime px-4 py-2 rounded text-sm"><Plus size={14}/></button>
+          </div>
+        )}
+      </div>
+
+      {/* Hero cards */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {hero.map((h, idx) => (
+          <div key={h.id} className="panel overflow-hidden">
+            <div className="aspect-video bg-secondary relative">
+              <img src={h.url} alt={h.category_label} className="w-full h-full object-cover" />
+              {h.video_url && (
+                <div className="absolute inset-0 bg-black/40 grid place-items-center">
+                  <Play size={28} className="text-white fill-white" />
+                </div>
+              )}
+              <div className="absolute top-2 right-2 flex gap-1">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${h.is_active ? "bg-primary text-primary-foreground" : "bg-secondary/80 text-muted-foreground"}`}>
+                  {h.is_active ? "Live" : "Hidden"}
+                </span>
+              </div>
+            </div>
+            <div className="p-3 space-y-2">
+              {editId === h.id ? (
+                <div className="flex gap-2">
+                  <input value={editLabel} onChange={e => setEditLabel(e.target.value)}
+                    autoFocus onKeyDown={e => e.key === "Enter" && saveLabel(h.id)}
+                    className="flex-1 bg-input border border-border rounded px-2 py-1 text-sm" />
+                  <button onClick={() => saveLabel(h.id)} className="btn-lime px-2 py-1 rounded text-xs">Save</button>
+                  <button onClick={() => setEditId(null)} className="px-2 py-1 rounded text-xs border border-border"><X size={12}/></button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-sm truncate">{h.category_label}</span>
+                  <button onClick={() => { setEditId(h.id); setEditLabel(h.category_label); }}
+                    className="text-[10px] text-primary hover:underline shrink-0">Rename</button>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs text-muted-foreground flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" checked={h.is_active ?? true}
+                    onChange={e => toggleActive(h.id, e.target.checked)} />
+                  Show on homepage
+                </label>
+                <div className="flex gap-1">
+                  <button onClick={() => moveOrder(h.id, h.sort_order ?? 0, -1)} disabled={idx === 0}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-1 text-xs">▲</button>
+                  <button onClick={() => moveOrder(h.id, h.sort_order ?? 0, 1)} disabled={idx === hero.length - 1}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-1 text-xs">▼</button>
+                  <button onClick={() => remove(h.id)}
+                    className="text-destructive p-1 hover:bg-destructive/10 rounded ml-1"><Trash2 size={14}/></button>
+                </div>
+              </div>
             </div>
           </div>
         ))}
-        {hero.length === 0 && <div className="col-span-full text-center text-muted-foreground py-12">No hero images yet.</div>}
+        {hero.length === 0 && (
+          <div className="col-span-full text-center text-muted-foreground py-12">
+            No hero images yet — upload one above.
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 function GalleryManager({ gallery, qc }: { gallery: any[]; qc: any }) {
-  const [url, setUrl] = useState("");
-  const [category, setCategory] = useState("Weddings");
+  const [category, setCategory] = useState("");
   const [caption, setCaption] = useState("");
-  const categories = Array.from(new Set([...gallery.map(g => g.category), "Weddings", "Portraits", "Events", "Products", "Maternity", "Kids", "Corporate"]));
+  const [progress, setProgress] = useState<number | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [editItem, setEditItem] = useState<{ id: string; caption: string; category: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLInputElement>(null);
 
-  const add = async () => {
-    if (!url.trim() || !category.trim()) return toast.error("URL and category required");
-    const { error } = await supabase.from("gallery_images").insert({ url, category, caption: caption || null, sort_order: 0 });
-    if (error) toast.error(error.message); else { toast.success("Added"); setUrl(""); setCaption(""); qc.invalidateQueries({ queryKey: ["all-gallery"] }); qc.invalidateQueries({ queryKey: ["gallery"] }); }
+  const dbCategories = Array.from(new Set(gallery.map(g => g.category))).sort();
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["all-gallery"] });
+    qc.invalidateQueries({ queryKey: ["gallery"] });
   };
+
+  const uploadFile = async (file: File) => {
+    if (!category.trim()) return toast.error("Pick a category first");
+    const isVideo = file.type.startsWith("video/");
+    setProgress(0); setUploading(file.name);
+    try {
+      const folder = isVideo
+        ? `tann-media/gallery/videos/${category.toLowerCase().replace(/\s+/g, "-")}`
+        : `tann-media/gallery/${category.toLowerCase().replace(/\s+/g, "-")}`;
+      const cloudUrl = await uploadToCloudinary(file, folder, setProgress);
+    const { error } = await supabase.from("gallery_images").insert({
+  url: cloudUrl,
+  category,
+  caption: caption || null,
+  media_type: isVideo ? "video" : "image",
+  sort_order: 0,
+});
+
+      if (error) toast.error(error.message);
+      else { toast.success(`✓ ${file.name} uploaded`); setCaption(""); invalidate(); }
+    } catch (err: any) {
+      toast.error(err.message ?? "Upload failed");
+    } finally { setProgress(null); setUploading(null); }
+  };
+
+  const handleFiles = (files: FileList | null) => {
+    if (!files) return;
+    Array.from(files).forEach(f => uploadFile(f));
+  };
+
   const remove = async (id: string) => {
-    if (!confirm("Delete this image?")) return;
+    if (!confirm("Delete this image/video?")) return;
     const { error } = await supabase.from("gallery_images").delete().eq("id", id);
-    if (error) toast.error(error.message); else { toast.success("Deleted"); qc.invalidateQueries({ queryKey: ["all-gallery"] }); qc.invalidateQueries({ queryKey: ["gallery"] }); }
+    if (error) toast.error(error.message);
+    else { toast.success("Deleted"); invalidate(); }
   };
-  const grouped = gallery.reduce<Record<string, any[]>>((acc, g) => { (acc[g.category] ??= []).push(g); return acc; }, {});
+
+  const saveEdit = async () => {
+    if (!editItem) return;
+    const { error } = await supabase.from("gallery_images")
+      .update({ caption: editItem.caption || null, category: editItem.category })
+      .eq("id", editItem.id);
+    if (error) toast.error(error.message);
+    else { toast.success("Updated ✓"); setEditItem(null); invalidate(); }
+  };
+
+  const grouped = gallery.reduce<Record<string, any[]>>(
+    (acc, g) => { (acc[g.category] ??= []).push(g); return acc; }, {}
+  );
 
   return (
     <div className="mt-8 space-y-6">
+      {/* Upload panel */}
       <div className="panel p-6">
-        <h2 className="font-display text-xl font-bold mb-4">Add gallery image</h2>
-        <div className="grid md:grid-cols-[1fr_180px_180px_auto] gap-3">
-          <input value={url} onChange={e => setUrl(e.target.value)} placeholder="Image URL (https://...)" className="bg-input border border-border rounded px-3 py-2 text-sm" />
-          <input list="catlist" value={category} onChange={e => setCategory(e.target.value)} placeholder="Category" className="bg-input border border-border rounded px-3 py-2 text-sm" />
-          <datalist id="catlist">{categories.map(c => <option key={c} value={c} />)}</datalist>
-          <input value={caption} onChange={e => setCaption(e.target.value)} placeholder="Caption (optional)" className="bg-input border border-border rounded px-3 py-2 text-sm" />
-          <button onClick={add} className="btn-lime px-4 py-2 rounded text-sm inline-flex items-center gap-1"><Plus size={14}/> Add</button>
+        <h2 className="font-display text-xl font-bold mb-1">Upload gallery media</h2>
+        <p className="text-sm text-muted-foreground mb-5">
+          Upload photos and videos directly from your device — they appear on the website instantly.
+        </p>
+
+        {/* Step 1 — category */}
+        <div className="mb-4">
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">
+            Step 1 — Choose or create a category
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {dbCategories.map(c => (
+              <button key={c} onClick={() => setCategory(c)}
+                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                  category === c ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"
+                }`}>
+                {c}
+              </button>
+            ))}
+            <input
+              value={dbCategories.includes(category) ? "" : category}
+              onChange={e => setCategory(e.target.value)}
+              placeholder="New category name…"
+              className="bg-input border border-border rounded-full px-3 py-1.5 text-sm min-w-[180px]"
+            />
+          </div>
+          {category && (
+            <div className="mt-2 text-xs text-primary">
+              Uploading to: <span className="font-semibold">{category}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Step 2 — caption */}
+        <div className="mb-4">
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">
+            Step 2 — Caption (optional)
+          </label>
+          <input value={caption} onChange={e => setCaption(e.target.value)}
+            placeholder="e.g. Wedding at Sun City"
+            className="w-full max-w-md bg-input border border-border rounded px-3 py-2 text-sm" />
+        </div>
+
+        {/* Step 3 — upload */}
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">
+            Step 3 — Select files
+          </label>
+          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
+            onChange={e => handleFiles(e.target.files)} />
+          <input ref={videoRef} type="file" accept="video/mp4,video/quicktime,video/webm" className="hidden"
+            onChange={e => handleFiles(e.target.files)} />
+
+          {progress !== null ? (
+            <div className="w-full max-w-sm">
+              <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
+                <span className="truncate max-w-[200px]">{uploading}</span>
+                <span>{progress}%</span>
+              </div>
+              <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                <div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} />
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">Uploading to Cloudinary…</div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => { if (!category.trim()) return toast.error("Pick a category first"); fileRef.current?.click(); }}
+                className="flex-1 min-w-[200px] max-w-xs border-2 border-dashed border-border hover:border-primary rounded-xl py-8 text-center transition-colors group">
+                <ImageLucide size={24} className="mx-auto mb-2 text-muted-foreground group-hover:text-primary" />
+                <div className="text-sm font-semibold text-muted-foreground group-hover:text-foreground">Upload Photos</div>
+                <div className="text-xs text-muted-foreground mt-1">JPG, PNG, WEBP · Multiple allowed</div>
+              </button>
+              <button
+                onClick={() => { if (!category.trim()) return toast.error("Pick a category first"); videoRef.current?.click(); }}
+                className="flex-1 min-w-[200px] max-w-xs border-2 border-dashed border-border hover:border-primary rounded-xl py-8 text-center transition-colors group">
+                <Video size={24} className="mx-auto mb-2 text-muted-foreground group-hover:text-primary" />
+                <div className="text-sm font-semibold text-muted-foreground group-hover:text-foreground">Upload Video</div>
+                <div className="text-xs text-muted-foreground mt-1">MP4, MOV, WEBM</div>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* Gallery grid per category */}
       {Object.entries(grouped).map(([cat, items]) => (
-        <div key={cat}>
-          <h3 className="font-display text-lg font-bold mb-3">{cat} <span className="text-muted-foreground font-normal text-sm">({items.length})</span></h3>
+        <div key={cat} className="panel p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <h3 className="font-display text-lg font-bold">{cat}</h3>
+              <span className="text-muted-foreground text-sm">({items.length} items)</span>
+            </div>
+          </div>
           <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2">
             {items.map(g => (
-              <div key={g.id} className="relative aspect-square rounded-lg overflow-hidden group">
-                <img src={g.url} alt={g.caption ?? cat} className="w-full h-full object-cover" />
-                <button onClick={() => remove(g.id)} className="absolute top-1.5 right-1.5 bg-destructive/90 text-white p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button>
+              <div key={g.id} className="relative aspect-square rounded-lg overflow-hidden group bg-secondary">
+                {(g.media_type === "video" || /\.(mp4|mov|webm)(\?|$)/i.test(g.url)) ? (
+                  <div className="w-full h-full grid place-items-center bg-black/60">
+                    <Play size={20} className="text-primary fill-current" />
+                    <div className="absolute bottom-0 inset-x-0 text-[8px] text-center text-white/60 pb-1">VIDEO</div>
+                  </div>
+                ) : (
+                  <img src={g.url} alt={g.caption ?? cat} className="w-full h-full object-cover" />
+                )}
+                {/* Hover overlay with actions */}
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
+                  <button
+                    onClick={() => setEditItem({ id: g.id, caption: g.caption ?? "", category: g.category })}
+                    className="w-full bg-white/20 hover:bg-white/30 text-white text-[10px] py-1 rounded flex items-center justify-center gap-1">
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={() => remove(g.id)}
+                    className="w-full bg-destructive/80 hover:bg-destructive text-white text-[10px] py-1 rounded flex items-center justify-center gap-1">
+                    <Trash2 size={10}/> Delete
+                  </button>
+                </div>
+                {g.caption && (
+                  <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[9px] px-1.5 py-1 truncate opacity-0 group-hover:opacity-0">
+                    {g.caption}
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </div>
       ))}
-      {gallery.length === 0 && <div className="text-center text-muted-foreground py-12">No gallery images yet.</div>}
+
+      {gallery.length === 0 && (
+        <div className="text-center text-muted-foreground py-16 panel p-8">
+          <ImageLucide size={32} className="mx-auto mb-3 opacity-30" />
+          <div>No gallery images yet — upload your first photo above.</div>
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {editItem && (
+        <div className="fixed inset-0 z-50 bg-black/70 grid place-items-center p-4" onClick={() => setEditItem(null)}>
+          <div className="panel p-6 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-lg font-bold">Edit image</h3>
+              <button onClick={() => setEditItem(null)}><X size={18}/></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Category</label>
+                <input value={editItem.category}
+                  onChange={e => setEditItem({ ...editItem, category: e.target.value })}
+                  list="edit-cats"
+                  className="w-full bg-input border border-border rounded px-3 py-2 text-sm" />
+                <datalist id="edit-cats">
+                  {dbCategories.map(c => <option key={c} value={c} />)}
+                </datalist>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Caption</label>
+                <input value={editItem.caption}
+                  onChange={e => setEditItem({ ...editItem, caption: e.target.value })}
+                  placeholder="e.g. Wedding at Sun City"
+                  className="w-full bg-input border border-border rounded px-3 py-2 text-sm" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setEditItem(null)}
+                  className="flex-1 px-4 py-2 rounded text-sm border border-border hover:bg-secondary">Cancel</button>
+                <button onClick={saveEdit}
+                  className="flex-1 btn-lime px-4 py-2 rounded text-sm font-semibold">Save changes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -955,8 +1293,9 @@ function GalleryManager({ gallery, qc }: { gallery: any[]; qc: any }) {
 function PromoManager({ promo, qc }: { promo: any; qc: any }) {
   const { data: packages = [] } = useQuery({
     queryKey: ["all-packages"],
-    queryFn: async () => (await supabase.from("packages").select("id,name,category,price").eq("is_active", true)).data ?? [],
+    queryFn: async () => (await supabase.from("packages").select("id,name,category,price,sale_price,is_on_sale").eq("is_active", true)).data ?? [],
   });
+
   const [form, setForm] = useState({
     title: promo?.title ?? "",
     description: promo?.description ?? "",
@@ -965,64 +1304,207 @@ function PromoManager({ promo, qc }: { promo: any; qc: any }) {
     is_active: promo?.is_active ?? true,
     package_name: promo?.package_name ?? "",
     package_category: promo?.package_category ?? "",
+    promo_code: promo?.promo_code ?? "",
+    original_price: promo?.original_price ?? "",
+    sale_price: promo?.sale_price ?? "",
   });
+
   useEffect(() => {
     if (promo) setForm({
-      title: promo.title ?? "", description: promo.description ?? "", discount_label: promo.discount_label ?? "",
-      ends_at: promo.ends_at ? new Date(promo.ends_at).toISOString().slice(0, 16) : "", is_active: promo.is_active,
+      title: promo.title ?? "",
+      description: promo.description ?? "",
+      discount_label: promo.discount_label ?? "",
+      ends_at: promo.ends_at ? new Date(promo.ends_at).toISOString().slice(0, 16) : "",
+      is_active: promo.is_active ?? true,
+      package_name: promo.package_name ?? "",
+      package_category: promo.package_category ?? "",
+      promo_code: promo.promo_code ?? "",
+      original_price: promo.original_price ?? "",
+      sale_price: promo.sale_price ?? "",
     });
   }, [promo]);
+
+  // When a package is selected, auto-fill original + sale price
+  const handlePackageSelect = (name: string) => {
+    const pkg = packages.find((p: any) => p.name === name);
+    setForm({
+      ...form,
+      package_name: name,
+      package_category: pkg?.category ?? "",
+      original_price: pkg ? String(pkg.price) : "",
+      sale_price: pkg?.is_on_sale && pkg?.sale_price ? String(pkg.sale_price) : "",
+    });
+  };
+
   const save = async () => {
     if (!form.title || !form.ends_at) return toast.error("Title and end date required");
-    const payload = { ...form, ends_at: new Date(form.ends_at).toISOString() };
+    const payload = {
+      title: form.title,
+      description: form.description,
+      discount_label: form.discount_label,
+      ends_at: new Date(form.ends_at).toISOString(),
+      is_active: form.is_active,
+      package_name: form.package_name || null,
+      package_category: form.package_category || null,
+      promo_code: form.promo_code || null,
+      original_price: form.original_price ? Number(form.original_price) : null,
+      sale_price: form.sale_price ? Number(form.sale_price) : null,
+    };
     const { error } = promo
       ? await supabase.from("promotions").update(payload).eq("id", promo.id)
       : await supabase.from("promotions").insert(payload);
-    if (error) toast.error(error.message); else { toast.success("Saved"); qc.invalidateQueries({ queryKey: ["any-promo"] }); qc.invalidateQueries({ queryKey: ["active-promo"] }); }
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Saved ✓");
+      qc.invalidateQueries({ queryKey: ["any-promo"] });
+      qc.invalidateQueries({ queryKey: ["active-promo"] });
+    }
   };
+
   const remove = async () => {
     if (!promo || !confirm("Delete promotion?")) return;
     await supabase.from("promotions").delete().eq("id", promo.id);
-    qc.invalidateQueries({ queryKey: ["any-promo"] }); qc.invalidateQueries({ queryKey: ["active-promo"] });
+    qc.invalidateQueries({ queryKey: ["any-promo"] });
+    qc.invalidateQueries({ queryKey: ["active-promo"] });
   };
+
+  const selectedPkg = packages.find((p: any) => p.name === form.package_name);
+  const savings = form.original_price && form.sale_price
+    ? Number(form.original_price) - Number(form.sale_price)
+    : null;
+
   return (
-    <div className="mt-8 panel p-6 max-w-2xl">
-      <h2 className="font-display text-xl font-bold mb-4 flex items-center gap-2"><Tag size={18}/> Sale promotion (shows at top of Gallery)</h2>
-      <div className="space-y-3">
-  <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Banner title (e.g. Weekend Special 🔥)" className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
-  <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Short description (e.g. Book a portrait session this weekend and save!)" rows={3} className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
-  <div className="grid md:grid-cols-2 gap-3">
-    <input value={form.discount_label} onChange={e => setForm({ ...form, discount_label: e.target.value })} placeholder="Discount label (e.g. Save 20%)" className="bg-input border border-border rounded px-3 py-2 text-sm" />
-    <input type="datetime-local" value={form.ends_at} onChange={e => setForm({ ...form, ends_at: e.target.value })} className="bg-input border border-border rounded px-3 py-2 text-sm" />
-  </div>
+    <div className="mt-8 space-y-6 max-w-2xl">
+      {/* Sale Banner */}
+      <div className="panel p-6">
+        <h2 className="font-display text-xl font-bold mb-1 flex items-center gap-2">
+          <Tag size={18}/> Sale promotion banner
+        </h2>
+        <p className="text-sm text-muted-foreground mb-5">Shows at the top of the Gallery page and as a ticker on all pages.</p>
 
-  {/* Package link */}
-  <div>
-    <div className="text-xs text-muted-foreground mb-1.5 font-medium">Link to a package (optional) — clicking the banner takes clients straight to booking</div>
-    <select value={form.package_name} onChange={e => {
-      const pkg = packages.find((p: any) => p.name === e.target.value);
-      setForm({ ...form, package_name: e.target.value, package_category: pkg?.category ?? "" });
-    }} className="bg-input border border-border rounded px-3 py-2 text-sm w-full">
-      <option value="">— No package link (just show banner) —</option>
-      {packages.map((p: any) => (
-        <option key={p.id} value={p.name}>{p.category} · {p.name} — R{Number(p.price).toLocaleString()}</option>
-      ))}
-    </select>
-    {form.package_name && (
-      <div className="mt-1.5 text-xs text-primary bg-primary/10 border border-primary/20 rounded px-3 py-2">
-        ✓ Clicking banner → auto-fills "{form.package_name}" in booking form
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block font-medium">Banner title *</label>
+            <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
+              placeholder="e.g. Weekend Special 🔥"
+              className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block font-medium">Description</label>
+            <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+              placeholder="e.g. Book a portrait session this weekend and save!"
+              rows={2} className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block font-medium">Discount label (shown on badge)</label>
+              <input value={form.discount_label} onChange={e => setForm({ ...form, discount_label: e.target.value })}
+                placeholder="e.g. 20% OFF or Save R500"
+                className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block font-medium">Ends at *</label>
+              <input type="datetime-local" value={form.ends_at}
+                onChange={e => setForm({ ...form, ends_at: e.target.value })}
+                className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
+            </div>
+          </div>
+
+          {/* Promo code field */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block font-medium">Promo code (optional — shown on banner)</label>
+            <input value={form.promo_code} onChange={e => setForm({ ...form, promo_code: e.target.value.toUpperCase() })}
+              placeholder="e.g. WEEKEND20"
+              className="bg-input border border-border rounded px-3 py-2 text-sm w-full font-mono uppercase" />
+            {form.promo_code && (
+              <div className="mt-1 text-xs text-primary bg-primary/10 border border-primary/20 rounded px-3 py-1.5">
+                ✓ Code <span className="font-bold">{form.promo_code}</span> will show on the banner so customers can copy it
+              </div>
+            )}
+          </div>
+
+          {/* Link to package */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block font-medium">Link to a package (optional)</label>
+            <select value={form.package_name} onChange={e => handlePackageSelect(e.target.value)}
+              className="bg-input border border-border rounded px-3 py-2 text-sm w-full">
+              <option value="">— No package link —</option>
+              {packages.map((p: any) => (
+                <option key={p.id} value={p.name}>
+                  {p.category} · {p.name} — R{Number(p.price).toLocaleString()}
+                  {p.is_on_sale ? ` → SALE R${Number(p.sale_price).toLocaleString()}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Original + Sale price — auto-filled from package, can override */}
+          <div className="grid md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block font-medium">Original price R (shown crossed out)</label>
+              <input type="number" value={form.original_price}
+                onChange={e => setForm({ ...form, original_price: e.target.value })}
+                placeholder="e.g. 7500"
+                className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block font-medium">Sale price R (shown in orange)</label>
+              <input type="number" value={form.sale_price}
+                onChange={e => setForm({ ...form, sale_price: e.target.value })}
+                placeholder="e.g. 4000"
+                className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
+            </div>
+          </div>
+
+          {/* Live preview of price display */}
+          {form.original_price && form.sale_price && (
+            <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/30">
+              <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wider font-semibold">Banner price preview</div>
+              <div className="flex items-center gap-4 flex-wrap">
+                <div>
+                  <div className="text-sm text-muted-foreground line-through">R{Number(form.original_price).toLocaleString()}</div>
+                  <div className="font-display text-2xl font-bold text-orange-500">R{Number(form.sale_price).toLocaleString()}</div>
+                </div>
+                {savings && savings > 0 && (
+                  <div className="bg-orange-500 text-white text-xs font-bold px-3 py-1.5 rounded-full">
+                    Save R{savings.toLocaleString()}!
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={form.is_active}
+              onChange={e => setForm({ ...form, is_active: e.target.checked })} />
+            Active (shows on website)
+          </label>
+
+          <div className="flex gap-2 pt-2">
+            <button onClick={save} className="btn-lime px-5 py-2.5 rounded text-sm font-semibold">
+              {promo ? "Update promotion" : "Create promotion"}
+            </button>
+            {promo && (
+              <button onClick={remove}
+                className="px-4 py-2.5 rounded text-sm text-destructive border border-destructive/40 hover:bg-destructive/10 inline-flex items-center gap-1.5">
+                <Trash2 size={14}/> Delete
+              </button>
+            )}
+          </div>
+        </div>
       </div>
-    )}
-  </div>
 
-  <label className="flex items-center gap-2 text-sm">
-    <input type="checkbox" checked={form.is_active} onChange={e => setForm({ ...form, is_active: e.target.checked })} /> Active (shows on website)
-  </label>
-  <div className="flex gap-2">
-    <button onClick={save} className="btn-lime px-5 py-2 rounded text-sm">{promo ? "Update" : "Create"} promotion</button>
-    {promo && <button onClick={remove} className="px-4 py-2 rounded text-sm text-destructive border border-destructive/40 hover:bg-destructive/10 inline-flex items-center gap-1"><Trash2 size={14}/> Delete</button>}
-  </div>
-</div>
+      {/* Info box about promo codes */}
+      <div className="panel p-5 border-primary/20 bg-primary/5">
+        <div className="text-xs uppercase tracking-wider text-primary font-semibold mb-2 flex items-center gap-2">
+          <Tag size={12}/> Promo codes management
+        </div>
+        <p className="text-sm text-muted-foreground">
+          To create, edit or delete promo codes — go to the <button onClick={() => {}} className="text-primary font-semibold hover:underline">Packages tab</button> and scroll to the bottom where you'll find the Promo Codes panel.
+        </p>
+      </div>
     </div>
   );
 }
