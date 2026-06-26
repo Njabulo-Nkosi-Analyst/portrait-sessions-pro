@@ -21,7 +21,7 @@ import { AvailabilityTab } from "@/components/admin/AvailabilityTab";
 import { TEMPLATES, waLink, type BookingForTemplate } from "@/lib/whatsappTemplates";
 
 export const Route = createFileRoute("/admin")({
-  head: () => ({ meta: [{ title: "Admin — Trope Photography" }] }),
+  head: () => ({ meta: [{ title: "Admin — Tann media" }] }),
   component: Admin,
 });
 
@@ -580,13 +580,37 @@ function BookingsTab({ inquiries, bookings, setConfirmFor, updateStatus, refresh
 }
 
 
-// ─────────── Confirm Booking Dialog ───────────
-function ConfirmDialog({ inquiry, packages, onClose, onDone }: { inquiry: any; packages: any[]; onClose: () => void; onDone: () => void }) {
+ //─────────── Confirm Booking Dialog ───────────
+// ─────────── Confirm Booking Dialog — AUTO-FILL + AUTO-DISCOUNT ───────────
+function ConfirmDialog({ inquiry, packages, onClose, onDone }: {
+  inquiry: any; packages: any[]; onClose: () => void; onDone: () => void;
+}) {
   const matched = packages.find(p => p.name === inquiry.package_interest);
-  const [packagePrice, setPackagePrice] = useState<number>(matched ? Number(matched.price) : 0);
-  const [discount, setDiscount] = useState<number>(0);
-  const [discountReason, setDiscountReason] = useState("");
+
+  // Auto-detect sale: if package is on sale, use sale_price and auto-set discount
+  const isOnSale = matched?.is_on_sale && matched?.sale_price != null;
+  const originalPrice = matched ? Number(matched.price) : 0;
+  const salePrice = isOnSale ? Number(matched.sale_price) : originalPrice;
+  const autoDiscount = isOnSale ? originalPrice - salePrice : 0;
+
+  const [packagePrice, setPackagePrice] = useState<number>(originalPrice);
+  const [discount, setDiscount] = useState<number>(
+  inquiry.discount_amount > 0 ? Number(inquiry.discount_amount) : autoDiscount
+);
+  const [discountReason, setDiscountReason] = useState(
+    isOnSale ? `Sale price — ${matched?.name} on sale` : ""
+  );
+  // Auto-fill session date AND time from what customer selected
   const [sessionDate, setSessionDate] = useState<string>(inquiry.preferred_date ?? "");
+  const [sessionTime, setSessionTime] = useState<string>(
+  inquiry.session_time
+    ? String(inquiry.session_time).slice(0, 5)
+    : (() => {
+        const msg = inquiry.message ?? "";
+        const match = msg.match(/Preferred time:\s*(\d{2}:\d{2})/);
+        return match ? match[1] : "";
+      })()
+);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const isCustom = !matched;
@@ -609,6 +633,7 @@ function ConfirmDialog({ inquiry, packages, onClose, onDone }: { inquiry: any; p
       discount_reason: discount > 0 ? discountReason : null,
       final_price: final,
       session_date: sessionDate || null,
+      session_time: sessionTime || null,
       notes: notes || null,
     });
     if (bErr) { setSaving(false); return toast.error(bErr.message); }
@@ -625,33 +650,92 @@ function ConfirmDialog({ inquiry, packages, onClose, onDone }: { inquiry: any; p
           <div>
             <span className="eyebrow">Confirm booking</span>
             <h2 className="font-display text-2xl font-bold mt-1">{inquiry.name}</h2>
-            <div className="text-xs text-muted-foreground mt-1">{inquiry.category ?? "—"} · {inquiry.package_interest ?? "Custom"} {isCustom && <span className="text-orange-400">(custom)</span>}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {inquiry.category ?? "—"} · {inquiry.package_interest ?? "Custom"}
+              {isCustom && <span className="text-orange-400 ml-1">(custom)</span>}
+              {isOnSale && <span className="ml-2 bg-orange-500 text-white text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full">ON SALE</span>}
+            </div>
           </div>
           <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground"><X size={20}/></button>
         </div>
-        <div className="space-y-3">
-          <Lbl t="Package price (R)"><input type="number" value={packagePrice} onChange={e => setPackagePrice(Number(e.target.value))} className="inp" /></Lbl>
-          <div className="grid grid-cols-2 gap-3">
-            <Lbl t="Discount (R)"><input type="number" value={discount} onChange={e => setDiscount(Number(e.target.value))} className="inp" /></Lbl>
-            <Lbl t="Session date"><input type="date" value={sessionDate} onChange={e => setSessionDate(e.target.value)} className="inp" /></Lbl>
+
+        {/* Sale notice */}
+        {isOnSale && (
+          <div className="mb-4 p-3 rounded-lg bg-orange-500/10 border border-orange-500/30 text-xs">
+            <div className="font-semibold text-orange-400 mb-1">🔖 Sale package detected — discount auto-applied</div>
+            <div className="text-muted-foreground">
+              Original: R{originalPrice.toLocaleString()} → Sale: R{salePrice.toLocaleString()}
+              <span className="text-orange-400 font-semibold ml-2">(Save R{autoDiscount.toLocaleString()})</span>
+            </div>
           </div>
+        )}
+
+        <div className="space-y-3">
+          <Lbl t="Package price (R)">
+            <input type="number" value={packagePrice}
+              onChange={e => setPackagePrice(Number(e.target.value))} className="inp" />
+          </Lbl>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Lbl t="Discount (R)">
+              <input type="number" value={discount}
+                onChange={e => setDiscount(Number(e.target.value))} className="inp" />
+            </Lbl>
+            {/* Auto-filled from customer's preferred date */}
+            <Lbl t="Session date">
+              <input type="date" value={sessionDate}
+                onChange={e => setSessionDate(e.target.value)} className="inp" />
+            </Lbl>
+          </div>
+
+          {/* Auto-filled from customer's preferred time */}
+          <Lbl t="Session time (auto-filled from customer)">
+            <input type="time" value={sessionTime}
+              onChange={e => setSessionTime(e.target.value)} className="inp" />
+          </Lbl>
+
           {discount > 0 && (
-            <Lbl t={`Discount reason (required) — feeds the "Discount Impact" metric`}>
-              <input value={discountReason} onChange={e => setDiscountReason(e.target.value)} placeholder="e.g. Repeat client, off-peak, package bundle" className="inp" />
+            <Lbl t='Discount reason (required)'>
+              <input value={discountReason}
+                onChange={e => setDiscountReason(e.target.value)}
+                placeholder="e.g. Sale package, repeat client, off-peak"
+                className="inp" />
             </Lbl>
           )}
-          <Lbl t="Internal notes"><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="inp" /></Lbl>
 
-          <div className="p-4 rounded-lg bg-primary/10 border border-primary/30">
+          <Lbl t="Internal notes">
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="inp" />
+          </Lbl>
+
+          {/* Final price summary */}
+          <div className={`p-4 rounded-lg border ${isOnSale ? "bg-orange-500/10 border-orange-500/30" : "bg-primary/10 border-primary/30"}`}>
             <div className="flex items-center justify-between">
               <span className="text-xs uppercase tracking-wider text-muted-foreground">Final price</span>
-              <span className="font-display text-3xl font-bold text-primary">R{final.toLocaleString()}</span>
+              <span className={`font-display text-3xl font-bold ${isOnSale ? "text-orange-500" : "text-primary"}`}>
+                R{final.toLocaleString()}
+              </span>
             </div>
-            {discount > 0 && <div className="text-xs text-orange-300 mt-1">−R{discount.toLocaleString()} discount</div>}
+            {discount > 0 && (
+              <div className="text-xs text-orange-300 mt-1">−R{discount.toLocaleString()} discount applied</div>
+            )}
+            <div className="text-xs text-muted-foreground mt-1">
+              50% deposit: <span className="font-semibold text-foreground">R{Math.round(final / 2).toLocaleString()}</span>
+            </div>
+            {sessionDate && (
+              <div className="text-xs text-muted-foreground mt-1">
+                Session: {new Date(sessionDate + "T00:00:00").toLocaleDateString("en-ZA", {
+                  weekday: "long", day: "numeric", month: "long", year: "numeric"
+                })}
+                {sessionTime ? ` · ${sessionTime}` : ""}
+              </div>
+            )}
           </div>
+
           <div className="flex gap-2 justify-end pt-2">
-            <button onClick={onClose} className="px-4 py-2 rounded text-sm text-muted-foreground hover:text-foreground">Cancel</button>
-            <button onClick={save} disabled={saving} className="btn-lime px-5 py-2 rounded text-sm font-semibold disabled:opacity-50">
+            <button onClick={onClose}
+              className="px-4 py-2 rounded text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+            <button onClick={save} disabled={saving}
+              className="btn-lime px-5 py-2 rounded text-sm font-semibold disabled:opacity-50">
               {saving ? "Confirming…" : "Confirm booking"}
             </button>
           </div>
@@ -1631,3 +1715,7 @@ export function DepositControls({ booking, onRefresh }: { booking: any; onRefres
     </div>
   );
 }
+
+
+
+

@@ -80,12 +80,13 @@ function GlobalPromoBanner() {
               <span>left</span>
             </div>
           )}
-          <Link
-            to="/pricing"
-            className="bg-primary-foreground text-primary text-xs font-bold px-3 py-1.5 rounded-full hover:bg-primary-foreground/90 transition-colors whitespace-nowrap"
-          >
-            View packages
-          </Link>
+         <Link
+  to="/pricing"
+  search={{ highlight: promo.package_name ?? undefined } as any}
+  className="bg-primary-foreground text-primary text-xs font-bold px-3 py-1.5 rounded-full hover:bg-primary-foreground/90 transition-colors whitespace-nowrap"
+>
+  View packages
+</Link>
           <button
             onClick={() => setDismissed(true)}
             className="text-primary-foreground/70 hover:text-primary-foreground p-1 transition-colors"

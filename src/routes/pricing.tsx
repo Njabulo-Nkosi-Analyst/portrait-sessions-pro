@@ -1,11 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Layout } from "@/components/Layout";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Check, Camera, Users, Briefcase, Baby, Heart, Smile,
-  Package, Video, Star, ArrowRight, Phone, Tag, X, Plus,
+  Package, Video, Star, ArrowRight, Phone, Tag, X,
 } from "lucide-react";
 
 const getIcon = (cat: string) => {
@@ -22,7 +22,12 @@ const getIcon = (cat: string) => {
   return Camera;
 };
 
+// ── CHANGE 1: validateSearch added so ?highlight= and ?category= are recognised ──
 export const Route = createFileRoute("/pricing")({
+  validateSearch: (s: Record<string, unknown>) => ({
+    highlight: typeof s.highlight === "string" ? s.highlight : undefined,
+    category:  typeof s.category  === "string" ? s.category  : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Pricing — Tann Media" },
@@ -37,6 +42,9 @@ function Pricing() {
   const [bookingModal, setBookingModal] = useState<{ pkg: any; pricing: any } | null>(null);
   const navigate = useNavigate();
 
+  // ── CHANGE 2a: read highlight + category from URL ──
+  const { highlight, category } = Route.useSearch();
+
   const { data: packages = [], isLoading } = useQuery({
     queryKey: ["packages"],
     queryFn: async () =>
@@ -44,7 +52,6 @@ function Pricing() {
         .order("category_sort_order").order("category").order("sort_order")).data ?? [],
   });
 
-  // ✅ Fetch active promo for auto-sale detection
   const { data: activePromo } = useQuery({
     queryKey: ["active-promo-pricing"],
     queryFn: async () => {
@@ -55,7 +62,6 @@ function Pricing() {
     },
   });
 
-  // ✅ Fetch add-ons for the modal
   const { data: addons = [] } = useQuery({
     queryKey: ["addons-active"],
     queryFn: async () =>
@@ -63,8 +69,32 @@ function Pricing() {
         .eq("is_active", true).order("sort_order")).data ?? [],
   });
 
+  // ── CHANGE 2b: switch tab when ?category= is in the URL ──
+  useEffect(() => {
+    if (category) setActiveTab(category);
+  }, [category]);
+
+  // ── CHANGE 2c: switch tab + scroll to card when ?highlight= is in the URL ──
+  useEffect(() => {
+    if (!highlight || packages.length === 0) return;
+
+    // Find which category this package belongs to and switch to it
+    const pkg = packages.find((p: any) => p.name === highlight);
+    if (pkg) setActiveTab(pkg.category);
+
+    // Wait one frame for the tab switch to re-render, then scroll
+    const id = setTimeout(() => {
+      const el = document.getElementById(`pkg-${highlight}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 120);
+
+    return () => clearTimeout(id);
+  }, [highlight, packages]);
+
   const grouped: { cat: string; items: typeof packages }[] = [];
-  packages.forEach(p => {
+  packages.forEach((p: any) => {
     const g = grouped.find(x => x.cat === p.category);
     if (g) g.items.push(p);
     else grouped.push({ cat: p.category, items: [p] });
@@ -74,9 +104,12 @@ function Pricing() {
   const currentTab = activeTab ?? categories[0] ?? null;
   const activeGroup = grouped.find(g => g.cat === currentTab);
 
-  // ✅ Get effective pricing — auto-sale from promo OR manual
   const getEffectivePricing = (p: any) => {
-    if (activePromo?.package_name === p.name && activePromo?.sale_price) {
+    if (
+  activePromo?.package_name?.toLowerCase() === p.name?.toLowerCase() &&
+  activePromo?.package_category?.toLowerCase() === p.category?.toLowerCase() &&
+  activePromo?.sale_price != null
+) {
       return {
         price: Number(activePromo.sale_price),
         originalPrice: Number(p.price),
@@ -98,10 +131,8 @@ function Pricing() {
   const handleBookClick = (p: any) => {
     const pricing = getEffectivePricing(p);
     if (addons.length > 0) {
-      // Show add-ons modal first
       setBookingModal({ pkg: p, pricing });
     } else {
-      // No add-ons — go straight to contact
       navigate({ to: "/contact", search: { category: p.category, package: p.name } as any, hash: "booking-form" });
     }
   };
@@ -149,11 +180,12 @@ function Pricing() {
               (activeGroup.items.length === 1 ? "max-w-sm" :
                 activeGroup.items.length === 2 ? "md:grid-cols-2 max-w-3xl" :
                   "md:grid-cols-2 lg:grid-cols-3")}>
-              {activeGroup.items.map(p => (
+              {activeGroup.items.map((p: any) => (
                 <PackageCard
                   key={p.id}
                   p={p}
                   pricing={getEffectivePricing(p)}
+                  highlight={highlight}
                   onBook={() => handleBookClick(p)}
                 />
               ))}
@@ -190,7 +222,6 @@ function Pricing() {
         </div>
       </div>
 
-      {/* ✅ Add-ons booking modal */}
       {bookingModal && (
         <AddOnsModal
           pkg={bookingModal.pkg}
@@ -215,7 +246,6 @@ function Pricing() {
   );
 }
 
-// ✅ Add-ons Modal
 function AddOnsModal({ pkg, pricing, addons, onClose, onConfirm }: {
   pkg: any;
   pricing: any;
@@ -246,7 +276,6 @@ function AddOnsModal({ pkg, pricing, addons, onClose, onConfirm }: {
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
         </div>
 
-        {/* Package price summary */}
         <div className="mb-5 p-4 rounded-lg bg-secondary/50">
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold">{pkg.name}</span>
@@ -268,7 +297,6 @@ function AddOnsModal({ pkg, pricing, addons, onClose, onConfirm }: {
           )}
         </div>
 
-        {/* Add-ons list */}
         <div className="mb-5">
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">
             Add-ons (optional)
@@ -295,7 +323,6 @@ function AddOnsModal({ pkg, pricing, addons, onClose, onConfirm }: {
           </div>
         </div>
 
-        {/* Total */}
         <div className="p-4 rounded-lg bg-primary/10 border border-primary/30 mb-5">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Estimated total</span>
@@ -343,11 +370,18 @@ function CategoryHeader({ cat }: { cat: string }) {
   );
 }
 
-function PackageCard({ p, pricing, onBook }: { p: any; pricing: any; onBook: () => void }) {
+// ── CHANGE 3: id added to outer div + highlight glow ring ──
+function PackageCard({ p, pricing, highlight, onBook }: {
+  p: any;
+  pricing: any;
+  highlight?: string;
+  onBook: () => void;
+}) {
   const Icon = getIcon(p.category);
   const mediaUrl = p.media_url || p.cover_image_url || null;
   const isVideo = p.media_type === "video" || (mediaUrl && /\.(mp4|webm|mov)/.test(mediaUrl));
   const { onSale, price, originalPrice } = pricing;
+  const isHighlighted = highlight === p.name;
 
   const deliverableLines: string[] = p.deliverables
     ? p.deliverables.includes("\n")
@@ -364,11 +398,15 @@ function PackageCard({ p, pricing, onBook }: { p: any; pricing: any; onBook: () 
   const features: string[] = Array.isArray(p.features) ? p.features : [];
 
   return (
-    <div className={
-      "panel flex flex-col overflow-hidden transition-all relative hover:shadow-lg hover:-translate-y-0.5 " +
-      (p.is_popular && !onSale ? "border-primary ring-1 ring-primary " : "") +
-      (onSale ? "border-orange-500/60 ring-1 ring-orange-500/40 shadow-[0_0_30px_rgba(249,115,22,0.15)] " : "")
-    }>
+    <div
+      id={`pkg-${p.name}`}
+      className={
+        "panel flex flex-col overflow-hidden transition-all relative hover:shadow-lg hover:-translate-y-0.5 " +
+        (isHighlighted ? "ring-2 ring-primary shadow-[0_0_40px_rgba(var(--primary-rgb),0.3)] scale-[1.01] " : "") +
+        (p.is_popular && !onSale && !isHighlighted ? "border-primary ring-1 ring-primary " : "") +
+        (onSale ? "border-orange-500/60 ring-1 ring-orange-500/40 shadow-[0_0_30px_rgba(249,115,22,0.15)] " : "")
+      }
+    >
       {onSale && (
         <div className="absolute top-3 left-3 z-20 bg-orange-500 text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full flex items-center gap-1">
           <Tag size={10} /> SALE
@@ -395,7 +433,6 @@ function PackageCard({ p, pricing, onBook }: { p: any; pricing: any; onBook: () 
       <div className="p-6 flex flex-col flex-1">
         <div className="font-display text-xl font-bold">{p.name}</div>
 
-        {/* Price — auto-sale aware */}
         <div className="mt-3 flex items-end gap-2 flex-wrap">
           {onSale ? (
             <>
@@ -459,7 +496,6 @@ function PackageCard({ p, pricing, onBook }: { p: any; pricing: any; onBook: () 
           )}
         </div>
 
-        {/* ✅ Book button — opens add-ons modal first */}
         <button onClick={onBook}
           className={"mt-6 text-center px-5 py-3 rounded-md text-sm font-semibold transition-all inline-flex items-center justify-center gap-2 " +
             (onSale ? "bg-orange-500 text-white hover:bg-orange-600" :

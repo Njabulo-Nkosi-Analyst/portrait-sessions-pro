@@ -76,7 +76,7 @@ function ReviewPage() {
       <div className="max-w-xl mx-auto">
         <div className="flex items-center gap-2 mb-8">
           <span className="w-9 h-9 rounded-full bg-primary text-primary-foreground grid place-items-center"><Camera size={16} /></span>
-          <span className="font-display text-xl font-bold">Trope Photography</span>
+          <span className="font-display text-xl font-bold">Tann media</span>
         </div>
 
         <span className="eyebrow">— Share your experience</span>

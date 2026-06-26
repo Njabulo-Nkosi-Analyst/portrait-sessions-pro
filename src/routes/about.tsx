@@ -3,7 +3,7 @@ import { Layout } from "@/components/Layout";
 import { Phone } from "lucide-react";
 
 export const Route = createFileRoute("/about")({
-  head: () => ({ meta: [{ title: "About — Trope Photography" }] }),
+  head: () => ({ meta: [{ title: "About — Tann media" }] }),
   component: About,
 });
 

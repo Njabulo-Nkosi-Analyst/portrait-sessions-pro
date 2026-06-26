@@ -1,6 +1,6 @@
 // WhatsApp quick-reply templates. Returns wa.me link with pre-filled text.
 
-const BANK = "FNB · W. Maluleka · Acc 63052599968";
+const BANK = "FNB · W. Ma · Acc 63052599968";
 
 export type TemplateKey = "confirmed" | "deposit_reminder" | "shoot_reminder" | "gallery_ready" | "thank_you";
 
@@ -21,7 +21,7 @@ export const TEMPLATES: { key: TemplateKey; label: string; build: (b: BookingFor
   {
     key: "confirmed",
     label: "Booking confirmed",
-    build: (b) => `Hi ${b.client_name}! 📸\n\nYour Trope Photography booking is confirmed:\n• Package: ${b.package_name ?? "Custom"}\n• Date: ${fmtDate(b.session_date)}${b.session_time ? ` at ${b.session_time.slice(0,5)}` : ""}\n• Total: R${Number(b.final_price ?? 0).toLocaleString()}\n\nA 50% deposit of R${Math.round(Number(b.final_price ?? 0) / 2).toLocaleString()} secures your slot.\nPay to: ${BANK}\n\nReply once paid and I'll send a confirmation receipt. See you soon!`,
+    build: (b) => `Hi ${b.client_name}! 📸\n\nYour Tann media booking is confirmed:\n• Package: ${b.package_name ?? "Custom"}\n• Date: ${fmtDate(b.session_date)}${b.session_time ? ` at ${b.session_time.slice(0,5)}` : ""}\n• Total: R${Number(b.final_price ?? 0).toLocaleString()}\n\nA 50% deposit of R${Math.round(Number(b.final_price ?? 0) / 2).toLocaleString()} secures your slot.\nPay to: ${BANK}\n\nReply once paid and I'll send a confirmation receipt. See you soon!`,
   },
   {
     key: "deposit_reminder",
@@ -31,17 +31,17 @@ export const TEMPLATES: { key: TemplateKey; label: string; build: (b: BookingFor
   {
     key: "shoot_reminder",
     label: "Shoot reminder",
-    build: (b) => `Hi ${b.client_name}! Just a reminder that your Trope Photography session is tomorrow, ${fmtDate(b.session_date)}${b.session_time ? ` at ${b.session_time.slice(0,5)}` : ""}. \n\nWear what makes you feel best, and message me if anything changes. See you then! 📸`,
+    build: (b) => `Hi ${b.client_name}! Just a reminder that your Tann media session is tomorrow, ${fmtDate(b.session_date)}${b.session_time ? ` at ${b.session_time.slice(0,5)}` : ""}. \n\nWear what makes you feel best, and message me if anything changes. See you then! 📸`,
   },
   {
     key: "gallery_ready",
     label: "Gallery ready",
-    build: (b, extra) => `Hi ${b.client_name}! 🎉\n\nYour photos from your ${b.package_name ?? "session"} are ready to view.\n\nOpen your gallery here: ${extra?.galleryUrl ?? "https://tropephotography.com/dashboard"}\n\nLet me know what you think — and feel free to share!`,
+    build: (b, extra) => `Hi ${b.client_name}! 🎉\n\nYour photos from your ${b.package_name ?? "session"} are ready to view.\n\nOpen your gallery here: ${extra?.galleryUrl ?? "https://tannmedia.com/dashboard"}\n\nLet me know what you think — and feel free to share!`,
   },
   {
     key: "thank_you",
     label: "Thank you + review request",
-    build: (b) => `Hi ${b.client_name}! Thank you so much for trusting Trope Photography with your ${b.package_name ?? "session"}. 💛\n\nIf you have 30 seconds, I'd love a quick review here:\nhttps://tropephotography.com/review/{BOOKING_ID}\n\nReferrals mean the world — thanks again!`,
+    build: (b) => `Hi ${b.client_name}! Thank you so much for trusting Tann media with your ${b.package_name ?? "session"}. 💛\n\nIf you have 30 seconds, I'd love a quick review here:\nhttps://tannmedia.com/review/{BOOKING_ID}\n\nReferrals mean the world — thanks again!`,
   },
 ];
 

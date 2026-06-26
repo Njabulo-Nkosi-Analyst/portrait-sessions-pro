@@ -4,7 +4,7 @@ import { useFavourites } from "@/hooks/useFavourites";
 import { Heart, Trash2, ArrowRight, Camera } from "lucide-react";
 
 export const Route = createFileRoute("/favourites")({
-  head: () => ({ meta: [{ title: "My Favourites — Trope Photography" }] }),
+  head: () => ({ meta: [{ title: "My Favourites — Tann media" }] }),
   component: Favourites,
 });
 

@@ -1,3 +1,4 @@
+import { Logo } from "@/components/TropeLogo";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
@@ -10,7 +11,7 @@ export function AuthShell({ title, subtitle, children, footer }: { title: string
         <div className="relative h-full flex flex-col justify-between p-10">
           <Link to="/" className="flex items-center gap-2 text-white">
             <span className="w-8 h-8 rounded-full grid place-items-center bg-primary text-primary-foreground font-display font-bold">T</span>
-            <span className="font-display text-xl font-bold tracking-[0.18em]">TROPE</span>
+           <Logo className="h-14 w-auto" />
           </Link>
           <p className="text-white font-display text-3xl font-bold max-w-sm">"Photograph what you love."</p>
         </div>
@@ -19,7 +20,7 @@ export function AuthShell({ title, subtitle, children, footer }: { title: string
         <div className="w-full max-w-sm">
           <Link to="/" className="lg:hidden flex items-center gap-2 mb-8">
             <span className="w-8 h-8 rounded-full grid place-items-center bg-primary text-primary-foreground font-display font-bold">T</span>
-            <span className="font-display text-xl font-bold tracking-[0.18em]">TROPE</span>
+            <Logo className="h-14 w-auto" />
           </Link>
           <h1 className="font-display text-3xl font-bold">{title}</h1>
           {subtitle && <p className="text-sm text-muted-foreground mt-2">{subtitle}</p>}
