@@ -1,11 +1,1 @@
-{
-  "buildCommand": "vite build",
-  "outputDirectory": "dist",
-  "framework": null,
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
-}
+{"rewrites":[{"source":"/(.*)","destination":"/index.html"}]}
