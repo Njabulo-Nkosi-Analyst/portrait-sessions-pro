@@ -22,7 +22,6 @@ const getIcon = (cat: string) => {
   return Camera;
 };
 
-// ── CHANGE 1: validateSearch added so ?highlight= and ?category= are recognised ──
 export const Route = createFileRoute("/pricing")({
   validateSearch: (s: Record<string, unknown>) => ({
     highlight: typeof s.highlight === "string" ? s.highlight : undefined,
@@ -37,12 +36,16 @@ export const Route = createFileRoute("/pricing")({
   component: Pricing,
 });
 
+// Case-insensitive trimmed match helper
+const looslyMatch = (a?: string | null, b?: string | null) =>
+  !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+
 function Pricing() {
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [bookingModal, setBookingModal] = useState<{ pkg: any; pricing: any } | null>(null);
+  const [highlighted, setHighlighted] = useState(false);
   const navigate = useNavigate();
 
-  // ── CHANGE 2a: read highlight + category from URL ──
   const { highlight, category } = Route.useSearch();
 
   const { data: packages = [], isLoading } = useQuery({
@@ -69,29 +72,33 @@ function Pricing() {
         .eq("is_active", true).order("sort_order")).data ?? [],
   });
 
-  // ── CHANGE 2b: switch tab when ?category= is in the URL ──
+  // Switch tab when ?category= arrives
   useEffect(() => {
     if (category) setActiveTab(category);
   }, [category]);
 
-  // ── CHANGE 2c: switch tab + scroll to card when ?highlight= is in the URL ──
+  // Switch tab + scroll when ?highlight= arrives — runs after packages load
   useEffect(() => {
-    if (!highlight || packages.length === 0) return;
+    if (!highlight || isLoading || packages.length === 0) return;
 
-    // Find which category this package belongs to and switch to it
-    const pkg = packages.find((p: any) => p.name === highlight);
-    if (pkg) setActiveTab(pkg.category);
+   const pkg = packages.find((p: any) =>
+  p.id === highlight || looslyMatch(p.name, highlight)
+);
+    // Switch to the right tab first
+    setActiveTab(pkg.category);
 
-    // Wait one frame for the tab switch to re-render, then scroll
-    const id = setTimeout(() => {
-      const el = document.getElementById(`pkg-${highlight}`);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    }, 120);
+    // Give React two frames to render the tab, then scroll + flash
+    const t1 = setTimeout(() => {
+      const el = document.getElementById(`pkg-${pkg.id}`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlighted(true);
+      // Remove flash ring after 3 seconds
+      setTimeout(() => setHighlighted(false), 3000);
+    }, 400);
 
-    return () => clearTimeout(id);
-  }, [highlight, packages]);
+    return () => clearTimeout(t1);
+  }, [highlight, isLoading, packages]);
 
   const grouped: { cat: string; items: typeof packages }[] = [];
   packages.forEach((p: any) => {
@@ -104,29 +111,34 @@ function Pricing() {
   const currentTab = activeTab ?? categories[0] ?? null;
   const activeGroup = grouped.find(g => g.cat === currentTab);
 
-  const getEffectivePricing = (p: any) => {
-    if (
-  activePromo?.package_name?.toLowerCase() === p.name?.toLowerCase() &&
-  activePromo?.package_category?.toLowerCase() === p.category?.toLowerCase() &&
-  activePromo?.sale_price != null
-) {
-      return {
-        price: Number(activePromo.sale_price),
-        originalPrice: Number(p.price),
-        onSale: true,
-        savings: Number(p.price) - Number(activePromo.sale_price),
-      };
-    }
-    if (p.is_on_sale && p.sale_price != null) {
-      return {
-        price: Number(p.sale_price),
-        originalPrice: Number(p.price),
-        onSale: true,
-        savings: Number(p.price) - Number(p.sale_price),
-      };
-    }
-    return { price: Number(p.price), originalPrice: null, onSale: false, savings: null };
-  };
+  // Match by name only (case-insensitive) — category is already guaranteed
+  // by the tab switch, so we don't need to double-check it here
+ const getEffectivePricing = (p: any) => {
+  // Match by package_id first (exact), fallback to name+category for old promos
+  const promoHits = activePromo?.sale_price != null && (
+    (activePromo.package_id && activePromo.package_id === p.id) ||
+    (!activePromo.package_id &&
+      looslyMatch(activePromo.package_name, p.name) &&
+      looslyMatch(activePromo.package_category, p.category))
+  );
+  if (promoHits) {
+    return {
+      price: Number(activePromo.sale_price),
+      originalPrice: Number(p.price),
+      onSale: true,
+      savings: Number(p.price) - Number(activePromo.sale_price),
+    };
+  }
+  if (p.is_on_sale && p.sale_price != null) {
+    return {
+      price: Number(p.sale_price),
+      originalPrice: Number(p.price),
+      onSale: true,
+      savings: Number(p.price) - Number(p.sale_price),
+    };
+  }
+  return { price: Number(p.price), originalPrice: null, onSale: false, savings: null };
+};
 
   const handleBookClick = (p: any) => {
     const pricing = getEffectivePricing(p);
@@ -160,8 +172,9 @@ function Pricing() {
               return (
                 <button key={cat} onClick={() => setActiveTab(cat)}
                   className={"px-5 py-2.5 rounded-full text-sm border transition-all inline-flex items-center gap-2 " +
-                    (isActive ? "bg-primary text-primary-foreground border-primary font-semibold" :
-                      "border-border text-muted-foreground hover:text-foreground hover:border-primary/50")}>
+                    (isActive
+                      ? "bg-primary text-primary-foreground border-primary font-semibold"
+                      : "border-border text-muted-foreground hover:text-foreground hover:border-primary/50")}>
                   <Icon size={14} />{cat}
                 </button>
               );
@@ -185,7 +198,7 @@ function Pricing() {
                   key={p.id}
                   p={p}
                   pricing={getEffectivePricing(p)}
-                  highlight={highlight}
+                  isHighlighted={highlighted && looslyMatch(p.name, highlight)}
                   onBook={() => handleBookClick(p)}
                 />
               ))}
@@ -370,18 +383,16 @@ function CategoryHeader({ cat }: { cat: string }) {
   );
 }
 
-// ── CHANGE 3: id added to outer div + highlight glow ring ──
-function PackageCard({ p, pricing, highlight, onBook }: {
+function PackageCard({ p, pricing, isHighlighted, onBook }: {
   p: any;
   pricing: any;
-  highlight?: string;
+  isHighlighted?: boolean;
   onBook: () => void;
 }) {
   const Icon = getIcon(p.category);
   const mediaUrl = p.media_url || p.cover_image_url || null;
   const isVideo = p.media_type === "video" || (mediaUrl && /\.(mp4|webm|mov)/.test(mediaUrl));
   const { onSale, price, originalPrice } = pricing;
-  const isHighlighted = highlight === p.name;
 
   const deliverableLines: string[] = p.deliverables
     ? p.deliverables.includes("\n")
@@ -399,13 +410,19 @@ function PackageCard({ p, pricing, highlight, onBook }: {
 
   return (
     <div
-      id={`pkg-${p.name}`}
-      className={
-        "panel flex flex-col overflow-hidden transition-all relative hover:shadow-lg hover:-translate-y-0.5 " +
-        (isHighlighted ? "ring-2 ring-primary shadow-[0_0_40px_rgba(var(--primary-rgb),0.3)] scale-[1.01] " : "") +
-        (p.is_popular && !onSale && !isHighlighted ? "border-primary ring-1 ring-primary " : "") +
-        (onSale ? "border-orange-500/60 ring-1 ring-orange-500/40 shadow-[0_0_30px_rgba(249,115,22,0.15)] " : "")
-      }
+      id={`pkg-${p.id}`}
+      className={[
+        "panel flex flex-col overflow-hidden transition-all relative hover:shadow-lg hover:-translate-y-0.5",
+        isHighlighted
+          ? "ring-2 ring-orange-500 shadow-[0_0_40px_rgba(249,115,22,0.35)] scale-[1.01]"
+          : "",
+        onSale && !isHighlighted
+          ? "border-orange-500/60 ring-1 ring-orange-500/40 shadow-[0_0_30px_rgba(249,115,22,0.15)]"
+          : "",
+        p.is_popular && !onSale && !isHighlighted
+          ? "border-primary ring-1 ring-primary"
+          : "",
+      ].filter(Boolean).join(" ")}
     >
       {onSale && (
         <div className="absolute top-3 left-3 z-20 bg-orange-500 text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full flex items-center gap-1">
@@ -498,8 +515,11 @@ function PackageCard({ p, pricing, highlight, onBook }: {
 
         <button onClick={onBook}
           className={"mt-6 text-center px-5 py-3 rounded-md text-sm font-semibold transition-all inline-flex items-center justify-center gap-2 " +
-            (onSale ? "bg-orange-500 text-white hover:bg-orange-600" :
-              p.is_popular ? "bg-primary text-primary-foreground hover:bg-primary/90 pulse-cta" : "btn-lime")}>
+            (onSale
+              ? "bg-orange-500 text-white hover:bg-orange-600"
+              : p.is_popular
+                ? "bg-primary text-primary-foreground hover:bg-primary/90 pulse-cta"
+                : "btn-lime")}>
           Book this package <ArrowRight size={14} />
         </button>
       </div>

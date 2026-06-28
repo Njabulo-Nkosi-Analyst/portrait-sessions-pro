@@ -444,13 +444,18 @@ function Contact() {
               <h2 className="font-display text-2xl font-bold mb-4">{cat}</h2>
               <div className="grid md:grid-cols-3 gap-4">
                 {items.map((p: any) => {
-                  const basePrice = Number(p.price);
-                  const isPromoTarget = activePromo?.package_name === p.name && activePromo?.sale_price;
-                  const cardSalePrice = isPromoTarget
-                    ? Number(activePromo.sale_price)
-                    : p.is_on_sale && p.sale_price != null
-                    ? Number(p.sale_price)
-                    : null;
+                 const basePrice = Number(p.price);
+const isPromoTarget = activePromo?.sale_price && (
+  (activePromo.package_id && activePromo.package_id === p.id) ||
+  (!activePromo.package_id &&
+    activePromo.package_name === p.name &&
+    activePromo.package_category === p.category)
+);
+const cardSalePrice = isPromoTarget
+  ? Number(activePromo.sale_price)
+  : p.is_on_sale && p.sale_price != null
+  ? Number(p.sale_price)
+  : null;
                   const isOnSale = cardSalePrice !== null;
                   const deliverableLines: string[] = p.deliverables ? p.deliverables.split("\n").filter((d: string) => d.trim()) : [];
                   const perfectForLines: string[] = p.perfect_for ? p.perfect_for.split("\n").filter((d: string) => d.trim()) : [];

@@ -1386,6 +1386,7 @@ function PromoManager({ promo, qc }: { promo: any; qc: any }) {
     discount_label: promo?.discount_label ?? "",
     ends_at: promo?.ends_at ? new Date(promo.ends_at).toISOString().slice(0, 16) : "",
     is_active: promo?.is_active ?? true,
+    package_id: promo?.package_id ?? "", 
     package_name: promo?.package_name ?? "",
     package_category: promo?.package_category ?? "",
     promo_code: promo?.promo_code ?? "",
@@ -1400,6 +1401,7 @@ function PromoManager({ promo, qc }: { promo: any; qc: any }) {
       discount_label: promo.discount_label ?? "",
       ends_at: promo.ends_at ? new Date(promo.ends_at).toISOString().slice(0, 16) : "",
       is_active: promo.is_active ?? true,
+      package_id: promo.package_id ?? "",
       package_name: promo.package_name ?? "",
       package_category: promo.package_category ?? "",
       promo_code: promo.promo_code ?? "",
@@ -1409,16 +1411,17 @@ function PromoManager({ promo, qc }: { promo: any; qc: any }) {
   }, [promo]);
 
   // When a package is selected, auto-fill original + sale price
-  const handlePackageSelect = (name: string) => {
-    const pkg = packages.find((p: any) => p.name === name);
-    setForm({
-      ...form,
-      package_name: name,
-      package_category: pkg?.category ?? "",
-      original_price: pkg ? String(pkg.price) : "",
-      sale_price: pkg?.is_on_sale && pkg?.sale_price ? String(pkg.sale_price) : "",
-    });
-  };
+  const handlePackageSelect = (pkgId: string) => {
+  const pkg = packages.find((p: any) => p.id === pkgId);
+  setForm({
+    ...form,
+    package_id: pkgId,
+    package_name: pkg?.name ?? "",
+    package_category: pkg?.category ?? "",
+    original_price: pkg ? String(pkg.price) : "",
+    sale_price: pkg?.is_on_sale && pkg?.sale_price ? String(pkg.sale_price) : "",
+  });
+};
 
   const save = async () => {
     if (!form.title || !form.ends_at) return toast.error("Title and end date required");
@@ -1428,6 +1431,7 @@ function PromoManager({ promo, qc }: { promo: any; qc: any }) {
       discount_label: form.discount_label,
       ends_at: new Date(form.ends_at).toISOString(),
       is_active: form.is_active,
+      package_id: form.package_id || null,
       package_name: form.package_name || null,
       package_category: form.package_category || null,
       promo_code: form.promo_code || null,
@@ -1512,16 +1516,16 @@ function PromoManager({ promo, qc }: { promo: any; qc: any }) {
           {/* Link to package */}
           <div>
             <label className="text-xs text-muted-foreground mb-1 block font-medium">Link to a package (optional)</label>
-            <select value={form.package_name} onChange={e => handlePackageSelect(e.target.value)}
-              className="bg-input border border-border rounded px-3 py-2 text-sm w-full">
-              <option value="">— No package link —</option>
-              {packages.map((p: any) => (
-                <option key={p.id} value={p.name}>
-                  {p.category} · {p.name} — R{Number(p.price).toLocaleString()}
-                  {p.is_on_sale ? ` → SALE R${Number(p.sale_price).toLocaleString()}` : ""}
-                </option>
-              ))}
-            </select>
+            <select value={form.package_id} onChange={e => handlePackageSelect(e.target.value)}
+  className="bg-input border border-border rounded px-3 py-2 text-sm w-full">
+  <option value="">— No package link —</option>
+  {packages.map((p: any) => (
+    <option key={p.id} value={p.id}>
+      {p.category} · {p.name} — R{Number(p.price).toLocaleString()}
+      {p.is_on_sale ? ` → SALE R${Number(p.sale_price).toLocaleString()}` : ""}
+    </option>
+  ))}
+</select>
           </div>
 
           {/* Original + Sale price — auto-filled from package, can override */}

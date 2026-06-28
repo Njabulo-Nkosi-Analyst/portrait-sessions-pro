@@ -93,13 +93,13 @@ function Gallery() {
     },
   });
 
-  // Fetch the linked package to show sale styling on its card
   const { data: promoPackage } = useQuery({
     queryKey: ["promo-package", promo?.package_name],
     enabled: !!promo?.package_name,
     queryFn: async () => {
       const { data } = await supabase.from("packages").select("*")
-        .eq("name", promo!.package_name).eq("is_active", true).maybeSingle();
+        .ilike("name", promo!.package_name)   // case-insensitive match
+        .eq("is_active", true).maybeSingle();
       return data;
     },
   });
@@ -133,25 +133,24 @@ function Gallery() {
     if (mode === "video" && !hasVideos) setMode("photos");
   }, [hasVideos, mode]);
 
- const claimOffer = () => {
+  // Navigate to pricing page, switch to the right category tab, and flash the sale card
+  const claimOffer = () => {
   if (!promo) return;
   navigate({
     to: "/pricing",
-    search: { highlight: promo.package_name || undefined } as any,
+    search: {
+      highlight: promo.package_id || promo.package_name || undefined,
+      category: promo.package_category || undefined,
+    } as any,
   });
 };
 
-  // ── Promo code validation ──────────────────────────────────────────────────
-  // The code shown on the banner comes from promotions.promo_code (set by admin).
-  // We validate against BOTH promotions table AND promo_codes table.
   const checkPromoCode = async () => {
     if (!promoCode.trim()) return;
     setPromoStatus("checking");
     const code = promoCode.trim().toUpperCase();
 
-    // 1. Check if it matches the banner promo code directly
     if (promo?.promo_code && promo.promo_code.toUpperCase() === code) {
-      // Valid if promo is still active and not expired
       if (promo.ends_at && new Date(promo.ends_at) < new Date()) {
         setPromoStatus("invalid");
         setPromoMsg("❌ This promo has expired.");
@@ -163,7 +162,6 @@ function Gallery() {
       return;
     }
 
-    // 2. Fall back to promo_codes table
     const { data } = await supabase.from("promo_codes").select("*").eq("code", code).eq("is_active", true).maybeSingle();
     if (!data) {
       setPromoStatus("invalid");
@@ -190,7 +188,6 @@ function Gallery() {
   const copyCode = (code: string) => {
     navigator.clipboard.writeText(code).catch(() => {});
     setCodeCopied(true);
-    // Also pre-fill the input
     setPromoCode(code);
     setPromoStatus("idle");
     setPromoMsg("");
@@ -205,7 +202,7 @@ function Gallery() {
     <Layout>
       <section className="max-w-7xl mx-auto px-5 lg:px-8 pt-12 lg:pt-20">
 
-        {/* ── Promo Banner ────────────────────────────────────────────── */}
+        {/* ── Promo Banner ── */}
         {promo && (
           <div className="mb-10 panel p-6 lg:p-8 border-primary bg-gradient-to-br from-primary/15 via-background to-background relative overflow-hidden">
             <div className="absolute top-0 right-0 w-48 h-48 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
@@ -247,12 +244,11 @@ function Gallery() {
                 </div>
               </div>
 
-              {/* ── Sale package card (shown when admin links a package) ── */}
+              {/* ── Sale package card ── */}
               {promoPackage && (
                 <div className="pt-4 border-t border-border/50">
                   <div className="text-xs text-muted-foreground uppercase tracking-wider mb-3 font-semibold">On sale now</div>
                   <div className="rounded-xl border-2 border-orange-500/50 bg-orange-500/5 shadow-[0_0_30px_rgba(249,115,22,0.12)] p-5 relative overflow-hidden">
-                    {/* SALE badge */}
                     <div className="absolute top-3 right-3 bg-orange-500 text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full flex items-center gap-1">
                       <Tag size={9} /> ON SALE
                     </div>
@@ -260,7 +256,6 @@ function Gallery() {
                       <div className="font-display text-lg font-bold">{promoPackage.name}</div>
                       <div className="text-xs text-muted-foreground">{promoPackage.category} · {promoPackage.duration}</div>
                     </div>
-                    {/* Price */}
                     <div className="mt-3 flex items-end gap-3 flex-wrap">
                       <div>
                         <div className="text-sm text-muted-foreground line-through">
@@ -277,7 +272,6 @@ function Gallery() {
                         </span>
                       )}
                     </div>
-                    {/* Deliverables */}
                     {promoPackage.deliverables && (
                       <div className="mt-3 pt-3 border-t border-orange-500/20">
                         <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 font-semibold">What you get</div>
@@ -299,7 +293,7 @@ function Gallery() {
                 </div>
               )}
 
-              {/* ── Price row (when no package card but prices set) ── */}
+              {/* ── Price row (no package card but prices set) ── */}
               {!promoPackage && (promo.original_price || promo.sale_price) && (
                 <div className="flex flex-wrap items-center gap-6 pt-4 border-t border-border/50">
                   <div>
@@ -340,8 +334,6 @@ function Gallery() {
                     {codeCopied && <span className="text-xs text-primary font-medium">Copied!</span>}
                   </div>
                 )}
-
-                {/* Validator */}
                 <div className="flex flex-wrap gap-2 items-start">
                   <div className="flex gap-2 flex-1 min-w-[260px] max-w-md">
                     <input
