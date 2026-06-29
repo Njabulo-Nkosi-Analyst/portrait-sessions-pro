@@ -84,7 +84,6 @@ function Admin() {
     enabled: isAdmin,
   });
 
-  // ───── Analytics ─────
   const priceMap = useMemo(() => new Map(packages.map(p => [p.name, Number(p.price)])), [packages]);
   const expensesByBooking = useMemo(() => {
     const m = new Map<string, number>();
@@ -111,16 +110,12 @@ function Admin() {
     const prev7 = inquiries.filter(i => { const d = now - new Date(i.created_at).getTime(); return d >= week && d < 2 * week; }).length;
     const growth = prev7 ? ((last7 - prev7) / prev7) * 100 : last7 ? 100 : 0;
     const last30Revenue = bookings.filter(b => now - new Date(b.confirmed_at).getTime() < 30 * 86400000).reduce((s, b) => s + Number(b.final_price), 0);
-
-    // Month-over-month revenue growth %
     const d = new Date();
     const thisMonthStart = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
     const lastMonthStart = new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime();
     const thisMonthRev = bookings.filter(b => new Date(b.confirmed_at).getTime() >= thisMonthStart).reduce((s, b) => s + Number(b.final_price), 0);
     const lastMonthRev = bookings.filter(b => { const t = new Date(b.confirmed_at).getTime(); return t >= lastMonthStart && t < thisMonthStart; }).reduce((s, b) => s + Number(b.final_price), 0);
     const monthGrowth = lastMonthRev ? ((thisMonthRev - lastMonthRev) / lastMonthRev) * 100 : thisMonthRev ? 100 : 0;
-
-    // Avg spend per unique client (for pricing decisions)
     const spendByClient = new Map<string, number>();
     bookings.forEach(b => {
       const key = (b.client_email || b.client_name || b.id).toLowerCase();
@@ -128,12 +123,9 @@ function Admin() {
     });
     const uniqueClients = spendByClient.size;
     const avgSpendPerClient = uniqueClients ? netRevenue / uniqueClients : 0;
-
-    // top expense category
     const catTotals: Record<string, number> = {};
     expenses.forEach(e => { catTotals[e.type] = (catTotals[e.type] ?? 0) + Number(e.amount); });
     const topExpense = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0] ?? ["—", 0];
-
     return { grossRevenue, netRevenue, totalDiscounts, totalExpenses, netProfit, aov, margin,
       discountImpact, pipelineValue, conversion, newCount, avgRating, last7, growth,
       projected: last30Revenue, bookings: bookings.length, topExpense,
@@ -178,8 +170,6 @@ function Admin() {
   }, [bookings]);
 
   const unreadAlerts = notifications.filter(n => !n.is_read).length;
-
-  // ───── Mutations ─────
   const refresh = (...keys: string[]) => keys.forEach(k => qc.invalidateQueries({ queryKey: [k] }));
 
   const updateStatus = async (id: string, status: string) => {
@@ -242,7 +232,6 @@ function Admin() {
 
         {tab === "overview" && (
           <>
-            {/* KPI cards */}
             <div className="mt-8 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               <KPI icon={<PiggyBank size={18}/>} label="Net profit" value={`R${stats.netProfit.toLocaleString()}`}
                 accent tone={stats.netProfit < 0 ? "loss" : "good"}
@@ -380,22 +369,13 @@ function Admin() {
         )}
 
         {tab === "bookings" && (
-          <BookingsTab
-            inquiries={inquiries}
-            bookings={bookings}
-            setConfirmFor={setConfirmFor}
-            updateStatus={updateStatus}
-            refresh={refresh}
-          />
+          <BookingsTab inquiries={inquiries} bookings={bookings} setConfirmFor={setConfirmFor} updateStatus={updateStatus} refresh={refresh} />
         )}
-
         {tab === "finance" && <FinanceTab bookings={bookings} expenses={expenses} expensesByBooking={expensesByBooking} stats={stats} qc={qc} />}
         {tab === "alerts" && <AlertsTab notifications={notifications} qc={qc} />}
-
         {tab === "packages" && <PackagesTab />}
         {tab === "availability" && <AvailabilityTab />}
         {tab === "reviews" && <ReviewsTab testimonials={testimonials} qc={qc} />}
-
         {tab === "hero" && <HeroManager hero={hero} qc={qc} />}
         {tab === "gallery" && <GalleryManager gallery={gallery} qc={qc} />}
         {tab === "promo" && <PromoManager promo={promo} qc={qc} />}
@@ -413,16 +393,8 @@ function KPI({ icon, label, value, accent, tone, hint }: {
   icon: React.ReactNode; label: string; value: string; accent?: boolean;
   tone?: "loss" | "good" | "neutral"; hint?: string;
 }) {
-  const toneCls = tone === "loss"
-    ? "border-destructive/60 bg-destructive/10"
-    : tone === "good"
-    ? "border-primary/40"
-    : "";
-  const valueCls = tone === "loss"
-    ? "text-destructive"
-    : accent
-    ? "text-gradient-warm"
-    : "";
+  const toneCls = tone === "loss" ? "border-destructive/60 bg-destructive/10" : tone === "good" ? "border-primary/40" : "";
+  const valueCls = tone === "loss" ? "text-destructive" : accent ? "text-gradient-warm" : "";
   return (
     <div className={`panel p-4 ${accent && tone !== "loss" ? "border-primary/40" : ""} ${toneCls}`}>
       <div className="flex items-center justify-between text-muted-foreground">
@@ -434,20 +406,27 @@ function KPI({ icon, label, value, accent, tone, hint }: {
     </div>
   );
 }
+
 function Empty() {
   return <div className="text-center text-muted-foreground text-sm py-12">No data yet — will appear here as activity comes in.</div>;
 }
 
+// ─────────── Shared label helper — defined BEFORE ConfirmDialog ───────────
+function Lbl({ t, children }: { t: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <div className="text-xs text-muted-foreground mb-1.5 font-medium">{t}</div>
+      {children}
+    </label>
+  );
+}
 
-
-// ─────────── Bookings Tab — pending vs completed ───────────
+// ─────────── Bookings Tab ───────────
 function BookingsTab({ inquiries, bookings, setConfirmFor, updateStatus, refresh }: {
   inquiries: any[]; bookings: any[]; setConfirmFor: (i: any) => void;
   updateStatus: (id: string, s: string) => void; refresh: (...k: string[]) => void;
 }) {
   const [view, setView] = useState<"pending" | "completed">("pending");
-
-  // Pending = inquiries not yet booked. Completed = bookings with status completed.
   const pending = inquiries.filter(i => i.status !== "booked");
   const active = bookings.filter(b => b.status !== "completed" && b.status !== "cancelled");
   const completed = bookings.filter(b => b.status === "completed");
@@ -458,7 +437,7 @@ function BookingsTab({ inquiries, bookings, setConfirmFor, updateStatus, refresh
   };
   const clearCompleted = async () => {
     if (completed.length === 0) return;
-    if (!confirm(`Archive (delete) ${completed.length} completed booking${completed.length === 1 ? "" : "s"}? KPIs will drop accordingly. New / active bookings are kept.`)) return;
+    if (!confirm(`Archive (delete) ${completed.length} completed booking${completed.length === 1 ? "" : "s"}? KPIs will drop accordingly.`)) return;
     const ids = completed.map(b => b.id);
     const { error } = await supabase.from("bookings").delete().in("id", ids);
     if (error) toast.error(error.message); else { toast.success("Completed bookings cleared"); refresh("all-bookings", "all-expenses"); }
@@ -484,7 +463,6 @@ function BookingsTab({ inquiries, bookings, setConfirmFor, updateStatus, refresh
 
       {view === "pending" && (
         <>
-          {/* Active bookings awaiting completion */}
           {active.length > 0 && (
             <div className="panel overflow-x-auto">
               <div className="p-3 border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-2">
@@ -517,8 +495,6 @@ function BookingsTab({ inquiries, bookings, setConfirmFor, updateStatus, refresh
               </table>
             </div>
           )}
-
-          {/* Pending inquiries to confirm */}
           <div className="panel overflow-x-auto">
             <div className="p-3 border-b border-border text-xs uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-2">
               <Inbox size={12}/> New inquiries · confirm to convert into a booking
@@ -570,7 +546,7 @@ function BookingsTab({ inquiries, bookings, setConfirmFor, updateStatus, refresh
                   <td className="p-3 text-right font-semibold text-primary">R{Number(b.final_price).toLocaleString()}</td>
                 </tr>
               ))}
-              {completed.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">No completed bookings yet. Mark active ones complete when sessions wrap.</td></tr>}
+              {completed.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">No completed bookings yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -579,62 +555,92 @@ function BookingsTab({ inquiries, bookings, setConfirmFor, updateStatus, refresh
   );
 }
 
-
- //─────────── Confirm Booking Dialog ───────────
-// ─────────── Confirm Booking Dialog — AUTO-FILL + AUTO-DISCOUNT ───────────
+// ─────────── Confirm Booking Dialog — upgraded with promo + location ───────────
 function ConfirmDialog({ inquiry, packages, onClose, onDone }: {
   inquiry: any; packages: any[]; onClose: () => void; onDone: () => void;
 }) {
-  const matched = packages.find(p => p.name === inquiry.package_interest);
+  const { data: settings = [] } = useQuery({
+    queryKey: ["site-settings"],
+    queryFn: async () => (await supabase.from("site_settings").select("*")).data ?? [],
+  });
 
-  // Auto-detect sale: if package is on sale, use sale_price and auto-set discount
-  const isOnSale = matched?.is_on_sale && matched?.sale_price != null;
-  const originalPrice = matched ? Number(matched.price) : 0;
-  const salePrice = isOnSale ? Number(matched.sale_price) : originalPrice;
-  const autoDiscount = isOnSale ? originalPrice - salePrice : 0;
+  const { data: activePromo } = useQuery({
+    queryKey: ["active-promo-pricing"],
+    queryFn: async () => {
+      const { data } = await supabase.from("promotions").select("*")
+        .eq("is_active", true).gt("ends_at", new Date().toISOString())
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      return data;
+    },
+  });
 
-  const [packagePrice, setPackagePrice] = useState<number>(originalPrice);
-  const [discount, setDiscount] = useState<number>(
-  inquiry.discount_amount > 0 ? Number(inquiry.discount_amount) : autoDiscount
-);
-  const [discountReason, setDiscountReason] = useState(
-    isOnSale ? `Sale price — ${matched?.name} on sale` : ""
+  const serviceLocations: string[] = useMemo(() => {
+    try {
+      const raw = settings.find((s: any) => s.key === "service_locations")?.value;
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+  }, [settings]);
+
+  const matched = useMemo(() =>
+    packages.find(p => p.name === inquiry.package_interest && p.category === inquiry.category)
+    ?? packages.find(p => p.name === inquiry.package_interest)
+    ?? null,
+    [packages, inquiry]
   );
-  // Auto-fill session date AND time from what customer selected
+
+  const promoApplies = useMemo(() => {
+    if (!activePromo?.sale_price || !matched) return false;
+    if (activePromo.package_id && matched.id) return activePromo.package_id === matched.id;
+    return activePromo.package_name === matched.name && activePromo.package_category === matched.category;
+  }, [activePromo, matched]);
+
+  const originalPrice = matched ? Number(matched.price) : Number(inquiry.original_price ?? 0);
+  const autoSalePrice = promoApplies
+    ? Number(activePromo.sale_price)
+    : matched?.is_on_sale && matched?.sale_price != null
+    ? Number(matched.sale_price)
+    : null;
+  const isOnSale = autoSalePrice !== null;
+  const autoDiscount = isOnSale ? originalPrice - autoSalePrice! : 0;
+
+ const [packagePrice, setPackagePrice] = useState<number>(originalPrice);
+  const [discount, setDiscount] = useState<number>(
+    inquiry.discount_amount > 0 ? Number(inquiry.discount_amount) : autoDiscount
+  );
+  const [discountReason, setDiscountReason] = useState<string>(
+    inquiry.discount_label ?? (isOnSale ? `Sale — ${matched?.name ?? inquiry.package_interest}` : "")
+  );
   const [sessionDate, setSessionDate] = useState<string>(inquiry.preferred_date ?? "");
   const [sessionTime, setSessionTime] = useState<string>(
-  inquiry.session_time
-    ? String(inquiry.session_time).slice(0, 5)
-    : (() => {
-        const msg = inquiry.message ?? "";
-        const match = msg.match(/Preferred time:\s*(\d{2}:\d{2})/);
-        return match ? match[1] : "";
-      })()
-);
-  const [notes, setNotes] = useState("");
+    inquiry.session_time ? String(inquiry.session_time).slice(0, 5) : ""
+  );
+  const [location, setLocation] = useState<string>(inquiry.location ?? "");
+  const [locationOther, setLocationOther] = useState<string>(
+    inquiry.location && serviceLocations.length > 0 && !serviceLocations.includes(inquiry.location)
+      ? inquiry.location : ""
+  );
+  const [notes, setNotes] = useState<string>(inquiry.message ?? "");
   const [saving, setSaving] = useState(false);
-  const isCustom = !matched;
-  const final = Math.max(0, packagePrice - discount);
 
+  const isCustom = !matched;
+  const addonsTotal = Number(inquiry.addons_total ?? 0);
+  const final = Math.max(0, packagePrice - discount + addonsTotal);
+  const resolvedLocation = location === "Other (specify below)" ? locationOther.trim() : location;
   const save = async () => {
     if (packagePrice <= 0) return toast.error("Set a package price");
     if (discount > 0 && !discountReason.trim()) return toast.error("Add a reason for the discount");
     setSaving(true);
     const { error: bErr } = await supabase.from("bookings").insert({
-      inquiry_id: inquiry.id,
-      user_id: inquiry.user_id,
-      client_name: inquiry.name,
-      client_email: inquiry.email,
-      client_whatsapp: inquiry.whatsapp,
-      category: inquiry.category,
-      package_name: inquiry.package_interest ?? "Custom",
-      package_price: packagePrice,
-      discount_amount: discount,
+      inquiry_id: inquiry.id, user_id: inquiry.user_id,
+      client_name: inquiry.name, client_email: inquiry.email, client_whatsapp: inquiry.whatsapp,
+      category: inquiry.category, package_name: inquiry.package_interest ?? "Custom",
+ package_price: packagePrice, discount_amount: discount,
       discount_reason: discount > 0 ? discountReason : null,
-      final_price: final,
+      final_price: final, addons_total: addonsTotal > 0 ? addonsTotal : null,
       session_date: sessionDate || null,
-      session_time: sessionTime || null,
-      notes: notes || null,
+      session_time: sessionTime || null, location: resolvedLocation || null, notes: notes || null,
     });
     if (bErr) { setSaving(false); return toast.error(bErr.message); }
     await supabase.from("inquiries").update({ status: "booked" }).eq("id", inquiry.id);
@@ -645,97 +651,142 @@ function ConfirmDialog({ inquiry, packages, onClose, onDone }: {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm grid place-items-center p-4" onClick={onClose}>
-      <div className="panel p-6 max-w-lg w-full" onClick={e => e.stopPropagation()}>
+      <div className="panel p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
           <div>
             <span className="eyebrow">Confirm booking</span>
             <h2 className="font-display text-2xl font-bold mt-1">{inquiry.name}</h2>
-            <div className="text-xs text-muted-foreground mt-1">
-              {inquiry.category ?? "—"} · {inquiry.package_interest ?? "Custom"}
-              {isCustom && <span className="text-orange-400 ml-1">(custom)</span>}
-              {isOnSale && <span className="ml-2 bg-orange-500 text-white text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full">ON SALE</span>}
+            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+              <span>{inquiry.category ?? "—"} · {inquiry.package_interest ?? "Custom"}</span>
+              {isCustom && <span className="text-orange-400">(custom package)</span>}
+              {isOnSale && <span className="bg-orange-500 text-white text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full">ON SALE</span>}
             </div>
           </div>
           <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground"><X size={20}/></button>
         </div>
 
-        {/* Sale notice */}
+        <div className="mb-4 p-3 rounded-lg bg-secondary/50 border border-border text-xs space-y-1">
+          <div className="text-muted-foreground uppercase tracking-wider font-semibold mb-2">Customer details</div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+            <div><span className="text-muted-foreground">Email: </span>{inquiry.email}</div>
+            <div><span className="text-muted-foreground">WhatsApp: </span>{inquiry.whatsapp ?? "—"}</div>
+            {inquiry.location && (
+              <div className="col-span-2"><span className="text-muted-foreground">Requested location: </span>
+                <span className="font-semibold">{inquiry.location}</span>
+              </div>
+            )}
+            {inquiry.selected_addons && (
+              <div className="col-span-2"><span className="text-muted-foreground">Add-ons: </span>{
+                Array.isArray(inquiry.selected_addons) ? inquiry.selected_addons.join(", ") : inquiry.selected_addons
+              }</div>
+            )}
+          </div>
+        </div>
+
         {isOnSale && (
           <div className="mb-4 p-3 rounded-lg bg-orange-500/10 border border-orange-500/30 text-xs">
-            <div className="font-semibold text-orange-400 mb-1">🔖 Sale package detected — discount auto-applied</div>
+            <div className="font-semibold text-orange-400 mb-1">
+              🔖 {promoApplies ? "Promo sale" : "Package on sale"} — discount auto-applied
+            </div>
             <div className="text-muted-foreground">
-              Original: R{originalPrice.toLocaleString()} → Sale: R{salePrice.toLocaleString()}
+              Original: <span className="line-through">R{originalPrice.toLocaleString()}</span>
+              {" → "}Sale: <span className="text-orange-400 font-bold">R{autoSalePrice!.toLocaleString()}</span>
               <span className="text-orange-400 font-semibold ml-2">(Save R{autoDiscount.toLocaleString()})</span>
             </div>
+            {promoApplies && activePromo?.promo_code && (
+              <div className="mt-1 text-orange-400/70">Promo code: {activePromo.promo_code}</div>
+            )}
           </div>
         )}
 
         <div className="space-y-3">
           <Lbl t="Package price (R)">
-            <input type="number" value={packagePrice}
-              onChange={e => setPackagePrice(Number(e.target.value))} className="inp" />
+            <input type="number" value={packagePrice} onChange={e => setPackagePrice(Number(e.target.value))} className="inp" />
           </Lbl>
-
           <div className="grid grid-cols-2 gap-3">
             <Lbl t="Discount (R)">
-              <input type="number" value={discount}
-                onChange={e => setDiscount(Number(e.target.value))} className="inp" />
+              <input type="number" value={discount} onChange={e => setDiscount(Number(e.target.value))} className="inp" />
             </Lbl>
-            {/* Auto-filled from customer's preferred date */}
             <Lbl t="Session date">
-              <input type="date" value={sessionDate}
-                onChange={e => setSessionDate(e.target.value)} className="inp" />
+              <input type="date" value={sessionDate} onChange={e => setSessionDate(e.target.value)} className="inp" />
             </Lbl>
           </div>
-
-          {/* Auto-filled from customer's preferred time */}
-          <Lbl t="Session time (auto-filled from customer)">
-            <input type="time" value={sessionTime}
-              onChange={e => setSessionTime(e.target.value)} className="inp" />
+          <Lbl t="Session time">
+            <input type="time" value={sessionTime} onChange={e => setSessionTime(e.target.value)} className="inp" />
           </Lbl>
-
+          <Lbl t="Session location">
+            {serviceLocations.length > 0 ? (
+              <>
+                <select value={location} onChange={e => setLocation(e.target.value)} className="inp">
+                  <option value="">— Select a location —</option>
+                  {serviceLocations.map((loc: string) => (
+                    <option key={loc} value={loc}>{loc}</option>
+                  ))}
+                  {inquiry.location && !serviceLocations.includes(inquiry.location) && (
+                    <option value={inquiry.location}>{inquiry.location} (customer entry)</option>
+                  )}
+                </select>
+                {location === "Other (specify below)" && (
+                  <input value={locationOther} onChange={e => setLocationOther(e.target.value)}
+                    placeholder="Describe the location..." className="inp mt-2" />
+                )}
+              </>
+            ) : (
+              <input value={location} onChange={e => setLocation(e.target.value)}
+                placeholder="e.g. Pretoria CBD, Centurion..." className="inp" />
+            )}
+          </Lbl>
           {discount > 0 && (
-            <Lbl t='Discount reason (required)'>
-              <input value={discountReason}
-                onChange={e => setDiscountReason(e.target.value)}
-                placeholder="e.g. Sale package, repeat client, off-peak"
-                className="inp" />
+            <Lbl t="Discount reason (required)">
+              <input value={discountReason} onChange={e => setDiscountReason(e.target.value)}
+                placeholder="e.g. Sale package, repeat client, off-peak" className="inp" />
             </Lbl>
           )}
-
-          <Lbl t="Internal notes">
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="inp" />
+          <Lbl t="Internal notes / customer message">
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="inp" />
           </Lbl>
 
-          {/* Final price summary */}
           <div className={`p-4 rounded-lg border ${isOnSale ? "bg-orange-500/10 border-orange-500/30" : "bg-primary/10 border-primary/30"}`}>
-            <div className="flex items-center justify-between">
-              <span className="text-xs uppercase tracking-wider text-muted-foreground">Final price</span>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2 font-semibold">Booking summary</div>
+            <div className="space-y-1 text-xs text-muted-foreground mb-3">
+              <div><span className="text-foreground font-semibold">{inquiry.package_interest ?? "Custom"}</span> · {inquiry.category}</div>
+              {sessionDate && (
+                <div>📅 {new Date(sessionDate + "T00:00:00").toLocaleDateString("en-ZA", {
+                  weekday: "long", day: "numeric", month: "long", year: "numeric"
+                })}{sessionTime ? ` · ${sessionTime}` : ""}</div>
+              )}
+              {resolvedLocation && <div>📍 {resolvedLocation}</div>}
+            </div>
+       <div className="flex items-center justify-between border-t border-border/50 pt-3">
+              <div>
+                {discount > 0 && (
+                  <div className="text-xs text-muted-foreground line-through">
+                    R{(packagePrice + addonsTotal).toLocaleString()}
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  50% deposit: <span className="font-semibold text-foreground">R{Math.round(final / 2).toLocaleString()}</span>
+                </div>
+              </div>
               <span className={`font-display text-3xl font-bold ${isOnSale ? "text-orange-500" : "text-primary"}`}>
                 R{final.toLocaleString()}
               </span>
             </div>
-            {discount > 0 && (
-              <div className="text-xs text-orange-300 mt-1">−R{discount.toLocaleString()} discount applied</div>
-            )}
-            <div className="text-xs text-muted-foreground mt-1">
-              50% deposit: <span className="font-semibold text-foreground">R{Math.round(final / 2).toLocaleString()}</span>
-            </div>
-            {sessionDate && (
-              <div className="text-xs text-muted-foreground mt-1">
-                Session: {new Date(sessionDate + "T00:00:00").toLocaleDateString("en-ZA", {
-                  weekday: "long", day: "numeric", month: "long", year: "numeric"
-                })}
-                {sessionTime ? ` · ${sessionTime}` : ""}
+            {discount > 0 && <div className="text-xs text-orange-300 mt-1">−R{discount.toLocaleString()} discount applied</div>}
+            {addonsTotal > 0 && (
+              <div className="text-xs text-primary mt-1">
+                Includes R{addonsTotal.toLocaleString()} add-ons ({
+                  Array.isArray(inquiry.selected_addons)
+                    ? inquiry.selected_addons.join(", ")
+                    : inquiry.selected_addons ?? "—"
+                })
               </div>
             )}
           </div>
 
           <div className="flex gap-2 justify-end pt-2">
-            <button onClick={onClose}
-              className="px-4 py-2 rounded text-sm text-muted-foreground hover:text-foreground">Cancel</button>
-            <button onClick={save} disabled={saving}
-              className="btn-lime px-5 py-2 rounded text-sm font-semibold disabled:opacity-50">
+            <button onClick={onClose} className="px-4 py-2 rounded text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+            <button onClick={save} disabled={saving} className="btn-lime px-5 py-2 rounded text-sm font-semibold disabled:opacity-50">
               {saving ? "Confirming…" : "Confirm booking"}
             </button>
           </div>
@@ -745,14 +796,10 @@ function ConfirmDialog({ inquiry, packages, onClose, onDone }: {
     </div>
   );
 }
-function Lbl({ t, children }: { t: string; children: React.ReactNode }) {
-  return <label className="block"><div className="text-xs text-muted-foreground mb-1.5 font-medium">{t}</div>{children}</label>;
-}
 
 // ─────────── Finance Tab ───────────
 function FinanceTab({ bookings, expenses, expensesByBooking, stats, qc }: { bookings: any[]; expenses: any[]; expensesByBooking: Map<string, number>; stats: any; qc: any }) {
   const [openId, setOpenId] = useState<string | null>(null);
-
   return (
     <div className="mt-8 space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -761,11 +808,9 @@ function FinanceTab({ bookings, expenses, expensesByBooking, stats, qc }: { book
         <KPI icon={<TrendingDown size={18}/>} label="Total expenses" value={`R${stats.totalExpenses.toLocaleString()}`} />
         <KPI icon={<Percent size={18}/>} label="Margin" value={`${stats.margin.toFixed(1)}%`} />
       </div>
-
       <div className="panel p-4 lg:p-6">
         <h2 className="font-display text-xl font-bold mb-1 flex items-center gap-2"><Wallet size={18}/> Per-booking finances</h2>
         <p className="text-sm text-muted-foreground mb-5">Log petrol, wages, and other costs. The "Money Left" card updates live.</p>
-
         {bookings.length === 0 && <Empty/>}
         <div className="space-y-3">
           {bookings.map(b => {
@@ -792,9 +837,7 @@ function FinanceTab({ bookings, expenses, expensesByBooking, stats, qc }: { book
                     <div className="font-display font-bold">R{kept.toLocaleString()}</div>
                   </div>
                 </button>
-                {isOpen && (
-                  <BookingExpenses booking={b} items={expenses.filter(e => e.booking_id === b.id)} qc={qc} />
-                )}
+                {isOpen && <BookingExpenses booking={b} items={expenses.filter(e => e.booking_id === b.id)} qc={qc} />}
               </div>
             );
           })}
@@ -812,7 +855,6 @@ function BookingExpenses({ booking, items, qc }: { booking: any; items: any[]; q
   const [wageAmount, setWageAmount] = useState("");
   const [otherLabel, setOtherLabel] = useState("");
   const [otherAmount, setOtherAmount] = useState("");
-
   const reload = () => qc.invalidateQueries({ queryKey: ["all-expenses"] });
 
   const addPetrol = async () => {
@@ -839,7 +881,6 @@ function BookingExpenses({ booking, items, qc }: { booking: any; items: any[]; q
 
   return (
     <div className="border-t border-border p-4 grid lg:grid-cols-3 gap-4 bg-background/30">
-      {/* Add forms */}
       <div className="space-y-3">
         <div className="panel p-3">
           <div className="text-xs font-semibold flex items-center gap-1.5 mb-2"><Fuel size={13}/> Add petrol</div>
@@ -871,8 +912,6 @@ function BookingExpenses({ booking, items, qc }: { booking: any; items: any[]; q
           </div>
         </div>
       </div>
-
-      {/* Items list */}
       <div className="lg:col-span-2 panel p-3">
         <div className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">Logged expenses</div>
         {items.length === 0 ? (
@@ -901,7 +940,6 @@ function AlertsTab({ notifications, qc }: { notifications: any[]; qc: any }) {
   const markRead = async (id: string) => { await supabase.from("notifications").update({ is_read: true }).eq("id", id); refresh(); };
   const markAll = async () => { await supabase.from("notifications").update({ is_read: true }).eq("is_read", false); refresh(); toast.success("All marked read"); };
   const remove = async (id: string) => { await supabase.from("notifications").delete().eq("id", id); refresh(); };
-
   const iconFor = (k: string) => k === "inquiry" ? <Inbox size={14}/> : k === "booking" ? <CheckCircle2 size={14}/> : k === "review" ? <Star size={14}/> : k === "quote" ? <DollarSign size={14}/> : <Bell size={14}/>;
 
   return (
@@ -934,7 +972,7 @@ function AlertsTab({ notifications, qc }: { notifications: any[]; qc: any }) {
   );
 }
 
-// ─────────── Hero / Gallery / Promo Managers (unchanged from previous) ───────────
+// ─────────── Hero Manager ───────────
 function HeroManager({ hero, qc }: { hero: any[]; qc: any }) {
   const [label, setLabel] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
@@ -952,12 +990,8 @@ function HeroManager({ hero, qc }: { hero: any[]; qc: any }) {
 
   const saveFromUrl = async () => {
     if (!urlInput.trim() || !label.trim()) return toast.error("Label and URL required");
-    const { error } = await supabase.from("hero_images").insert({
-      url: urlInput, category_label: label,
-      sort_order: (hero.at(-1)?.sort_order ?? 0) + 1, is_active: true,
-    } as any);
-    if (error) toast.error(error.message);
-    else { toast.success("Added ✓"); setUrlInput(""); setLabel(""); invalidate(); }
+    const { error } = await supabase.from("hero_images").insert({ url: urlInput, category_label: label, sort_order: (hero.at(-1)?.sort_order ?? 0) + 1, is_active: true } as any);
+    if (error) toast.error(error.message); else { toast.success("Added ✓"); setUrlInput(""); setLabel(""); invalidate(); }
   };
 
   const uploadFile = async (file: File) => {
@@ -965,131 +999,82 @@ function HeroManager({ hero, qc }: { hero: any[]; qc: any }) {
     const isVideo = file.type.startsWith("video/");
     setProgress(0); setUploading(file.name);
     try {
-      const cloudUrl = await uploadToCloudinary(
-        file,
-        isVideo ? "tann-media/hero/videos" : "tann-media/hero",
-        setProgress
-      );
-      const { error } = await supabase.from("hero_images").insert({
-        url: cloudUrl, category_label: label,
-        video_url: isVideo ? cloudUrl : null,
-        sort_order: (hero.at(-1)?.sort_order ?? 0) + 1, is_active: true,
-      } as any);
-      if (error) toast.error(error.message);
-      else { toast.success("Hero image added ✓"); setLabel(""); invalidate(); }
-    } catch (err: any) {
-      toast.error(err.message ?? "Upload failed");
-    } finally { setProgress(null); setUploading(null); }
+      const cloudUrl = await uploadToCloudinary(file, isVideo ? "tann-media/hero/videos" : "tann-media/hero", setProgress);
+      const { error } = await supabase.from("hero_images").insert({ url: cloudUrl, category_label: label, video_url: isVideo ? cloudUrl : null, sort_order: (hero.at(-1)?.sort_order ?? 0) + 1, is_active: true } as any);
+      if (error) toast.error(error.message); else { toast.success("Hero image added ✓"); setLabel(""); invalidate(); }
+    } catch (err: any) { toast.error(err.message ?? "Upload failed"); }
+    finally { setProgress(null); setUploading(null); }
   };
 
   const remove = async (id: string) => {
     if (!confirm("Delete this hero image?")) return;
     const { error } = await supabase.from("hero_images").delete().eq("id", id);
-    if (error) toast.error(error.message);
-    else { toast.success("Deleted"); invalidate(); }
+    if (error) toast.error(error.message); else { toast.success("Deleted"); invalidate(); }
   };
-
-  const toggleActive = async (id: string, active: boolean) => {
-    await supabase.from("hero_images").update({ is_active: active }).eq("id", id);
-    invalidate();
-  };
-
+  const toggleActive = async (id: string, active: boolean) => { await supabase.from("hero_images").update({ is_active: active }).eq("id", id); invalidate(); };
   const saveLabel = async (id: string) => {
     if (!editLabel.trim()) return;
     await supabase.from("hero_images").update({ category_label: editLabel }).eq("id", id);
     setEditId(null); setEditLabel(""); invalidate(); toast.success("Label updated");
   };
-
   const moveOrder = async (id: string, currentOrder: number, dir: -1 | 1) => {
-    await supabase.from("hero_images").update({ sort_order: currentOrder + dir }).eq("id", id);
-    invalidate();
+    await supabase.from("hero_images").update({ sort_order: currentOrder + dir }).eq("id", id); invalidate();
   };
 
   return (
     <div className="mt-8 space-y-6">
       <div className="panel p-6">
-        <h2 className="font-display text-xl font-bold mb-1 flex items-center gap-2">
-          <ImageLucide size={18}/> Add hero image / video
-        </h2>
-        <p className="text-sm text-muted-foreground mb-5">
-          These appear as the rotating background on your homepage. Upload from device or paste a URL.
-        </p>
-
+        <h2 className="font-display text-xl font-bold mb-1 flex items-center gap-2"><ImageLucide size={18}/> Add hero image / video</h2>
+        <p className="text-sm text-muted-foreground mb-5">These appear as the rotating background on your homepage.</p>
         <div className="mb-4">
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">
-            Category label (shown on homepage)
-          </label>
-          <input value={label} onChange={e => setLabel(e.target.value)}
-            placeholder="e.g. Weddings, Events, Portraits"
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">Category label (shown on homepage)</label>
+          <input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Weddings, Events, Portraits"
             className="w-full max-w-md bg-input border border-border rounded px-3 py-2 text-sm" />
         </div>
-
         <div className="flex gap-1 p-1 bg-secondary rounded-full w-fit mb-4">
-          <button onClick={() => setUploadMode("file")}
-            className={`px-4 py-1.5 rounded-full text-xs transition-all ${uploadMode === "file" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground"}`}>
-            Upload from device
-          </button>
-          <button onClick={() => setUploadMode("url")}
-            className={`px-4 py-1.5 rounded-full text-xs transition-all ${uploadMode === "url" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground"}`}>
-            Paste URL
-          </button>
+          <button onClick={() => setUploadMode("file")} className={`px-4 py-1.5 rounded-full text-xs transition-all ${uploadMode === "file" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground"}`}>Upload from device</button>
+          <button onClick={() => setUploadMode("url")} className={`px-4 py-1.5 rounded-full text-xs transition-all ${uploadMode === "url" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground"}`}>Paste URL</button>
         </div>
-
         {uploadMode === "file" ? (
           <div>
-            <input ref={fileRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm"
-              className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); }} />
+            <input ref={fileRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); }} />
             {progress !== null ? (
               <div className="w-full max-w-sm">
-                <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-                  <span className="truncate">{uploading}</span><span>{progress}%</span>
-                </div>
-                <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                  <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
-                </div>
+                <div className="flex justify-between text-xs text-muted-foreground mb-1.5"><span className="truncate">{uploading}</span><span>{progress}%</span></div>
+                <div className="h-2 bg-secondary rounded-full overflow-hidden"><div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} /></div>
               </div>
             ) : (
               <button onClick={() => { if (!label.trim()) return toast.error("Enter a label first"); fileRef.current?.click(); }}
                 className="w-full max-w-md border-2 border-dashed border-border hover:border-primary rounded-xl py-10 text-center transition-colors group">
                 <Upload size={28} className="mx-auto mb-2 text-muted-foreground group-hover:text-primary" />
-                <div className="text-sm font-semibold text-muted-foreground group-hover:text-foreground">
-                  Click to upload image or video
-                </div>
+                <div className="text-sm font-semibold text-muted-foreground group-hover:text-foreground">Click to upload image or video</div>
                 <div className="text-xs text-muted-foreground mt-1">JPG, PNG, WEBP, MP4</div>
               </button>
             )}
           </div>
         ) : (
           <div className="flex gap-2 max-w-md">
-            <input value={urlInput} onChange={e => setUrlInput(e.target.value)}
-              placeholder="https://..." className="flex-1 bg-input border border-border rounded px-3 py-2 text-sm" />
+            <input value={urlInput} onChange={e => setUrlInput(e.target.value)} placeholder="https://..."
+              className="flex-1 bg-input border border-border rounded px-3 py-2 text-sm" />
             <button onClick={saveFromUrl} className="btn-lime px-4 py-2 rounded text-sm"><Plus size={14}/></button>
           </div>
         )}
       </div>
-
-      {/* Hero cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {hero.map((h, idx) => (
           <div key={h.id} className="panel overflow-hidden">
             <div className="aspect-video bg-secondary relative">
               <img src={h.url} alt={h.category_label} className="w-full h-full object-cover" />
-              {h.video_url && (
-                <div className="absolute inset-0 bg-black/40 grid place-items-center">
-                  <Play size={28} className="text-white fill-white" />
-                </div>
-              )}
-              <div className="absolute top-2 right-2 flex gap-1">
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${h.is_active ? "bg-primary text-primary-foreground" : "bg-secondary/80 text-muted-foreground"}`}>
-                  {h.is_active ? "Live" : "Hidden"}
-                </span>
+              {h.video_url && <div className="absolute inset-0 bg-black/40 grid place-items-center"><Play size={28} className="text-white fill-white" /></div>}
+              <div className="absolute top-2 right-2">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${h.is_active ? "bg-primary text-primary-foreground" : "bg-secondary/80 text-muted-foreground"}`}>{h.is_active ? "Live" : "Hidden"}</span>
               </div>
             </div>
             <div className="p-3 space-y-2">
               {editId === h.id ? (
                 <div className="flex gap-2">
-                  <input value={editLabel} onChange={e => setEditLabel(e.target.value)}
-                    autoFocus onKeyDown={e => e.key === "Enter" && saveLabel(h.id)}
+                  <input value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus onKeyDown={e => e.key === "Enter" && saveLabel(h.id)}
                     className="flex-1 bg-input border border-border rounded px-2 py-1 text-sm" />
                   <button onClick={() => saveLabel(h.id)} className="btn-lime px-2 py-1 rounded text-xs">Save</button>
                   <button onClick={() => setEditId(null)} className="px-2 py-1 rounded text-xs border border-border"><X size={12}/></button>
@@ -1097,38 +1082,30 @@ function HeroManager({ hero, qc }: { hero: any[]; qc: any }) {
               ) : (
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-sm truncate">{h.category_label}</span>
-                  <button onClick={() => { setEditId(h.id); setEditLabel(h.category_label); }}
-                    className="text-[10px] text-primary hover:underline shrink-0">Rename</button>
+                  <button onClick={() => { setEditId(h.id); setEditLabel(h.category_label); }} className="text-[10px] text-primary hover:underline shrink-0">Rename</button>
                 </div>
               )}
               <div className="flex items-center justify-between gap-2">
                 <label className="text-xs text-muted-foreground flex items-center gap-1.5 cursor-pointer">
-                  <input type="checkbox" checked={h.is_active ?? true}
-                    onChange={e => toggleActive(h.id, e.target.checked)} />
+                  <input type="checkbox" checked={h.is_active ?? true} onChange={e => toggleActive(h.id, e.target.checked)} />
                   Show on homepage
                 </label>
                 <div className="flex gap-1">
-                  <button onClick={() => moveOrder(h.id, h.sort_order ?? 0, -1)} disabled={idx === 0}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-1 text-xs">▲</button>
-                  <button onClick={() => moveOrder(h.id, h.sort_order ?? 0, 1)} disabled={idx === hero.length - 1}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-1 text-xs">▼</button>
-                  <button onClick={() => remove(h.id)}
-                    className="text-destructive p-1 hover:bg-destructive/10 rounded ml-1"><Trash2 size={14}/></button>
+                  <button onClick={() => moveOrder(h.id, h.sort_order ?? 0, -1)} disabled={idx === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-1 text-xs">▲</button>
+                  <button onClick={() => moveOrder(h.id, h.sort_order ?? 0, 1)} disabled={idx === hero.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-1 text-xs">▼</button>
+                  <button onClick={() => remove(h.id)} className="text-destructive p-1 hover:bg-destructive/10 rounded ml-1"><Trash2 size={14}/></button>
                 </div>
               </div>
             </div>
           </div>
         ))}
-        {hero.length === 0 && (
-          <div className="col-span-full text-center text-muted-foreground py-12">
-            No hero images yet — upload one above.
-          </div>
-        )}
+        {hero.length === 0 && <div className="col-span-full text-center text-muted-foreground py-12">No hero images yet — upload one above.</div>}
       </div>
     </div>
   );
 }
 
+// ─────────── Gallery Manager ───────────
 function GalleryManager({ gallery, qc }: { gallery: any[]; qc: any }) {
   const [category, setCategory] = useState("");
   const [caption, setCaption] = useState("");
@@ -1137,13 +1114,9 @@ function GalleryManager({ gallery, qc }: { gallery: any[]; qc: any }) {
   const [editItem, setEditItem] = useState<{ id: string; caption: string; category: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
-
   const dbCategories = Array.from(new Set(gallery.map(g => g.category))).sort();
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["all-gallery"] });
-    qc.invalidateQueries({ queryKey: ["gallery"] });
-  };
+  const invalidate = () => { qc.invalidateQueries({ queryKey: ["all-gallery"] }); qc.invalidateQueries({ queryKey: ["gallery"] }); };
 
   const uploadFile = async (file: File) => {
     if (!category.trim()) return toast.error("Pick a category first");
@@ -1154,125 +1127,71 @@ function GalleryManager({ gallery, qc }: { gallery: any[]; qc: any }) {
         ? `tann-media/gallery/videos/${category.toLowerCase().replace(/\s+/g, "-")}`
         : `tann-media/gallery/${category.toLowerCase().replace(/\s+/g, "-")}`;
       const cloudUrl = await uploadToCloudinary(file, folder, setProgress);
-    const { error } = await supabase.from("gallery_images").insert({
-  url: cloudUrl,
-  category,
-  caption: caption || null,
-  media_type: isVideo ? "video" : "image",
-  sort_order: 0,
-});
-
-      if (error) toast.error(error.message);
-      else { toast.success(`✓ ${file.name} uploaded`); setCaption(""); invalidate(); }
-    } catch (err: any) {
-      toast.error(err.message ?? "Upload failed");
-    } finally { setProgress(null); setUploading(null); }
+      const { error } = await supabase.from("gallery_images").insert({ url: cloudUrl, category, caption: caption || null, media_type: isVideo ? "video" : "image", sort_order: 0 });
+      if (error) toast.error(error.message); else { toast.success(`✓ ${file.name} uploaded`); setCaption(""); invalidate(); }
+    } catch (err: any) { toast.error(err.message ?? "Upload failed"); }
+    finally { setProgress(null); setUploading(null); }
   };
 
-  const handleFiles = (files: FileList | null) => {
-    if (!files) return;
-    Array.from(files).forEach(f => uploadFile(f));
-  };
+  const handleFiles = (files: FileList | null) => { if (!files) return; Array.from(files).forEach(f => uploadFile(f)); };
 
   const remove = async (id: string) => {
     if (!confirm("Delete this image/video?")) return;
     const { error } = await supabase.from("gallery_images").delete().eq("id", id);
-    if (error) toast.error(error.message);
-    else { toast.success("Deleted"); invalidate(); }
+    if (error) toast.error(error.message); else { toast.success("Deleted"); invalidate(); }
   };
 
   const saveEdit = async () => {
     if (!editItem) return;
-    const { error } = await supabase.from("gallery_images")
-      .update({ caption: editItem.caption || null, category: editItem.category })
-      .eq("id", editItem.id);
-    if (error) toast.error(error.message);
-    else { toast.success("Updated ✓"); setEditItem(null); invalidate(); }
+    const { error } = await supabase.from("gallery_images").update({ caption: editItem.caption || null, category: editItem.category }).eq("id", editItem.id);
+    if (error) toast.error(error.message); else { toast.success("Updated ✓"); setEditItem(null); invalidate(); }
   };
 
-  const grouped = gallery.reduce<Record<string, any[]>>(
-    (acc, g) => { (acc[g.category] ??= []).push(g); return acc; }, {}
-  );
+  const grouped = gallery.reduce<Record<string, any[]>>((acc, g) => { (acc[g.category] ??= []).push(g); return acc; }, {});
 
   return (
     <div className="mt-8 space-y-6">
-      {/* Upload panel */}
       <div className="panel p-6">
         <h2 className="font-display text-xl font-bold mb-1">Upload gallery media</h2>
-        <p className="text-sm text-muted-foreground mb-5">
-          Upload photos and videos directly from your device — they appear on the website instantly.
-        </p>
-
-        {/* Step 1 — category */}
+        <p className="text-sm text-muted-foreground mb-5">Upload photos and videos directly from your device — they appear on the website instantly.</p>
         <div className="mb-4">
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">
-            Step 1 — Choose or create a category
-          </label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">Step 1 — Choose or create a category</label>
           <div className="flex flex-wrap gap-2">
             {dbCategories.map(c => (
               <button key={c} onClick={() => setCategory(c)}
-                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                  category === c ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"
-                }`}>
+                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${category === c ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
                 {c}
               </button>
             ))}
-            <input
-              value={dbCategories.includes(category) ? "" : category}
-              onChange={e => setCategory(e.target.value)}
-              placeholder="New category name…"
-              className="bg-input border border-border rounded-full px-3 py-1.5 text-sm min-w-[180px]"
-            />
+            <input value={dbCategories.includes(category) ? "" : category} onChange={e => setCategory(e.target.value)}
+              placeholder="New category name…" className="bg-input border border-border rounded-full px-3 py-1.5 text-sm min-w-[180px]" />
           </div>
-          {category && (
-            <div className="mt-2 text-xs text-primary">
-              Uploading to: <span className="font-semibold">{category}</span>
-            </div>
-          )}
+          {category && <div className="mt-2 text-xs text-primary">Uploading to: <span className="font-semibold">{category}</span></div>}
         </div>
-
-        {/* Step 2 — caption */}
         <div className="mb-4">
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">
-            Step 2 — Caption (optional)
-          </label>
-          <input value={caption} onChange={e => setCaption(e.target.value)}
-            placeholder="e.g. Wedding at Sun City"
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">Step 2 — Caption (optional)</label>
+          <input value={caption} onChange={e => setCaption(e.target.value)} placeholder="e.g. Wedding at Sun City"
             className="w-full max-w-md bg-input border border-border rounded px-3 py-2 text-sm" />
         </div>
-
-        {/* Step 3 — upload */}
         <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">
-            Step 3 — Select files
-          </label>
-          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
-            onChange={e => handleFiles(e.target.files)} />
-          <input ref={videoRef} type="file" accept="video/mp4,video/quicktime,video/webm" className="hidden"
-            onChange={e => handleFiles(e.target.files)} />
-
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">Step 3 — Select files</label>
+          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handleFiles(e.target.files)} />
+          <input ref={videoRef} type="file" accept="video/mp4,video/quicktime,video/webm" className="hidden" onChange={e => handleFiles(e.target.files)} />
           {progress !== null ? (
             <div className="w-full max-w-sm">
-              <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-                <span className="truncate max-w-[200px]">{uploading}</span>
-                <span>{progress}%</span>
-              </div>
-              <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                <div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} />
-              </div>
+              <div className="flex justify-between text-xs text-muted-foreground mb-1.5"><span className="truncate max-w-[200px]">{uploading}</span><span>{progress}%</span></div>
+              <div className="h-2 bg-secondary rounded-full overflow-hidden"><div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} /></div>
               <div className="text-xs text-muted-foreground mt-1">Uploading to Cloudinary…</div>
             </div>
           ) : (
             <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => { if (!category.trim()) return toast.error("Pick a category first"); fileRef.current?.click(); }}
+              <button onClick={() => { if (!category.trim()) return toast.error("Pick a category first"); fileRef.current?.click(); }}
                 className="flex-1 min-w-[200px] max-w-xs border-2 border-dashed border-border hover:border-primary rounded-xl py-8 text-center transition-colors group">
                 <ImageLucide size={24} className="mx-auto mb-2 text-muted-foreground group-hover:text-primary" />
                 <div className="text-sm font-semibold text-muted-foreground group-hover:text-foreground">Upload Photos</div>
                 <div className="text-xs text-muted-foreground mt-1">JPG, PNG, WEBP · Multiple allowed</div>
               </button>
-              <button
-                onClick={() => { if (!category.trim()) return toast.error("Pick a category first"); videoRef.current?.click(); }}
+              <button onClick={() => { if (!category.trim()) return toast.error("Pick a category first"); videoRef.current?.click(); }}
                 className="flex-1 min-w-[200px] max-w-xs border-2 border-dashed border-border hover:border-primary rounded-xl py-8 text-center transition-colors group">
                 <Video size={24} className="mx-auto mb-2 text-muted-foreground group-hover:text-primary" />
                 <div className="text-sm font-semibold text-muted-foreground group-hover:text-foreground">Upload Video</div>
@@ -1283,14 +1202,11 @@ function GalleryManager({ gallery, qc }: { gallery: any[]; qc: any }) {
         </div>
       </div>
 
-      {/* Gallery grid per category */}
       {Object.entries(grouped).map(([cat, items]) => (
         <div key={cat} className="panel p-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <h3 className="font-display text-lg font-bold">{cat}</h3>
-              <span className="text-muted-foreground text-sm">({items.length} items)</span>
-            </div>
+          <div className="flex items-center gap-3 mb-4">
+            <h3 className="font-display text-lg font-bold">{cat}</h3>
+            <span className="text-muted-foreground text-sm">({items.length} items)</span>
           </div>
           <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2">
             {items.map(g => (
@@ -1303,24 +1219,12 @@ function GalleryManager({ gallery, qc }: { gallery: any[]; qc: any }) {
                 ) : (
                   <img src={g.url} alt={g.caption ?? cat} className="w-full h-full object-cover" />
                 )}
-                {/* Hover overlay with actions */}
                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
-                  <button
-                    onClick={() => setEditItem({ id: g.id, caption: g.caption ?? "", category: g.category })}
-                    className="w-full bg-white/20 hover:bg-white/30 text-white text-[10px] py-1 rounded flex items-center justify-center gap-1">
-                    ✏️ Edit
-                  </button>
-                  <button
-                    onClick={() => remove(g.id)}
-                    className="w-full bg-destructive/80 hover:bg-destructive text-white text-[10px] py-1 rounded flex items-center justify-center gap-1">
-                    <Trash2 size={10}/> Delete
-                  </button>
+                  <button onClick={() => setEditItem({ id: g.id, caption: g.caption ?? "", category: g.category })}
+                    className="w-full bg-white/20 hover:bg-white/30 text-white text-[10px] py-1 rounded flex items-center justify-center gap-1">✏️ Edit</button>
+                  <button onClick={() => remove(g.id)}
+                    className="w-full bg-destructive/80 hover:bg-destructive text-white text-[10px] py-1 rounded flex items-center justify-center gap-1"><Trash2 size={10}/> Delete</button>
                 </div>
-                {g.caption && (
-                  <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[9px] px-1.5 py-1 truncate opacity-0 group-hover:opacity-0">
-                    {g.caption}
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -1334,7 +1238,6 @@ function GalleryManager({ gallery, qc }: { gallery: any[]; qc: any }) {
         </div>
       )}
 
-      {/* Edit modal */}
       {editItem && (
         <div className="fixed inset-0 z-50 bg-black/70 grid place-items-center p-4" onClick={() => setEditItem(null)}>
           <div className="panel p-6 max-w-sm w-full" onClick={e => e.stopPropagation()}>
@@ -1345,26 +1248,18 @@ function GalleryManager({ gallery, qc }: { gallery: any[]; qc: any }) {
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Category</label>
-                <input value={editItem.category}
-                  onChange={e => setEditItem({ ...editItem, category: e.target.value })}
-                  list="edit-cats"
+                <input value={editItem.category} onChange={e => setEditItem({ ...editItem, category: e.target.value })} list="edit-cats"
                   className="w-full bg-input border border-border rounded px-3 py-2 text-sm" />
-                <datalist id="edit-cats">
-                  {dbCategories.map(c => <option key={c} value={c} />)}
-                </datalist>
+                <datalist id="edit-cats">{dbCategories.map(c => <option key={c} value={c} />)}</datalist>
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Caption</label>
-                <input value={editItem.caption}
-                  onChange={e => setEditItem({ ...editItem, caption: e.target.value })}
-                  placeholder="e.g. Wedding at Sun City"
-                  className="w-full bg-input border border-border rounded px-3 py-2 text-sm" />
+                <input value={editItem.caption} onChange={e => setEditItem({ ...editItem, caption: e.target.value })}
+                  placeholder="e.g. Wedding at Sun City" className="w-full bg-input border border-border rounded px-3 py-2 text-sm" />
               </div>
               <div className="flex gap-2 pt-1">
-                <button onClick={() => setEditItem(null)}
-                  className="flex-1 px-4 py-2 rounded text-sm border border-border hover:bg-secondary">Cancel</button>
-                <button onClick={saveEdit}
-                  className="flex-1 btn-lime px-4 py-2 rounded text-sm font-semibold">Save changes</button>
+                <button onClick={() => setEditItem(null)} className="flex-1 px-4 py-2 rounded text-sm border border-border hover:bg-secondary">Cancel</button>
+                <button onClick={saveEdit} className="flex-1 btn-lime px-4 py-2 rounded text-sm font-semibold">Save changes</button>
               </div>
             </div>
           </div>
@@ -1374,6 +1269,7 @@ function GalleryManager({ gallery, qc }: { gallery: any[]; qc: any }) {
   );
 }
 
+// ─────────── Promo Manager ───────────
 function PromoManager({ promo, qc }: { promo: any; qc: any }) {
   const { data: packages = [] } = useQuery({
     queryKey: ["all-packages"],
@@ -1381,59 +1277,40 @@ function PromoManager({ promo, qc }: { promo: any; qc: any }) {
   });
 
   const [form, setForm] = useState({
-    title: promo?.title ?? "",
-    description: promo?.description ?? "",
+    title: promo?.title ?? "", description: promo?.description ?? "",
     discount_label: promo?.discount_label ?? "",
     ends_at: promo?.ends_at ? new Date(promo.ends_at).toISOString().slice(0, 16) : "",
     is_active: promo?.is_active ?? true,
-    package_id: promo?.package_id ?? "", 
-    package_name: promo?.package_name ?? "",
-    package_category: promo?.package_category ?? "",
-    promo_code: promo?.promo_code ?? "",
-    original_price: promo?.original_price ?? "",
-    sale_price: promo?.sale_price ?? "",
+    package_id: promo?.package_id ?? "", package_name: promo?.package_name ?? "",
+    package_category: promo?.package_category ?? "", promo_code: promo?.promo_code ?? "",
+    original_price: promo?.original_price ?? "", sale_price: promo?.sale_price ?? "",
   });
 
   useEffect(() => {
     if (promo) setForm({
-      title: promo.title ?? "",
-      description: promo.description ?? "",
+      title: promo.title ?? "", description: promo.description ?? "",
       discount_label: promo.discount_label ?? "",
       ends_at: promo.ends_at ? new Date(promo.ends_at).toISOString().slice(0, 16) : "",
       is_active: promo.is_active ?? true,
-      package_id: promo.package_id ?? "",
-      package_name: promo.package_name ?? "",
-      package_category: promo.package_category ?? "",
-      promo_code: promo.promo_code ?? "",
-      original_price: promo.original_price ?? "",
-      sale_price: promo.sale_price ?? "",
+      package_id: promo.package_id ?? "", package_name: promo.package_name ?? "",
+      package_category: promo.package_category ?? "", promo_code: promo.promo_code ?? "",
+      original_price: promo.original_price ?? "", sale_price: promo.sale_price ?? "",
     });
   }, [promo]);
 
-  // When a package is selected, auto-fill original + sale price
   const handlePackageSelect = (pkgId: string) => {
-  const pkg = packages.find((p: any) => p.id === pkgId);
-  setForm({
-    ...form,
-    package_id: pkgId,
-    package_name: pkg?.name ?? "",
-    package_category: pkg?.category ?? "",
-    original_price: pkg ? String(pkg.price) : "",
-    sale_price: pkg?.is_on_sale && pkg?.sale_price ? String(pkg.sale_price) : "",
-  });
-};
+    const pkg = packages.find((p: any) => p.id === pkgId);
+    setForm({ ...form, package_id: pkgId, package_name: pkg?.name ?? "", package_category: pkg?.category ?? "",
+      original_price: pkg ? String(pkg.price) : "",
+      sale_price: pkg?.is_on_sale && pkg?.sale_price ? String(pkg.sale_price) : "" });
+  };
 
   const save = async () => {
     if (!form.title || !form.ends_at) return toast.error("Title and end date required");
     const payload = {
-      title: form.title,
-      description: form.description,
-      discount_label: form.discount_label,
-      ends_at: new Date(form.ends_at).toISOString(),
-      is_active: form.is_active,
-      package_id: form.package_id || null,
-      package_name: form.package_name || null,
-      package_category: form.package_category || null,
+      title: form.title, description: form.description, discount_label: form.discount_label,
+      ends_at: new Date(form.ends_at).toISOString(), is_active: form.is_active,
+      package_name: form.package_name || null, package_category: form.package_category || null,
       promo_code: form.promo_code || null,
       original_price: form.original_price ? Number(form.original_price) : null,
       sale_price: form.sale_price ? Number(form.sale_price) : null,
@@ -1442,111 +1319,81 @@ function PromoManager({ promo, qc }: { promo: any; qc: any }) {
       ? await supabase.from("promotions").update(payload).eq("id", promo.id)
       : await supabase.from("promotions").insert(payload);
     if (error) toast.error(error.message);
-    else {
-      toast.success("Saved ✓");
-      qc.invalidateQueries({ queryKey: ["any-promo"] });
-      qc.invalidateQueries({ queryKey: ["active-promo"] });
-    }
+    else { toast.success("Saved ✓"); qc.invalidateQueries({ queryKey: ["any-promo"] }); qc.invalidateQueries({ queryKey: ["active-promo"] }); }
   };
 
   const remove = async () => {
     if (!promo || !confirm("Delete promotion?")) return;
     await supabase.from("promotions").delete().eq("id", promo.id);
-    qc.invalidateQueries({ queryKey: ["any-promo"] });
-    qc.invalidateQueries({ queryKey: ["active-promo"] });
+    qc.invalidateQueries({ queryKey: ["any-promo"] }); qc.invalidateQueries({ queryKey: ["active-promo"] });
   };
 
-  const selectedPkg = packages.find((p: any) => p.name === form.package_name);
-  const savings = form.original_price && form.sale_price
-    ? Number(form.original_price) - Number(form.sale_price)
-    : null;
+  const savings = form.original_price && form.sale_price ? Number(form.original_price) - Number(form.sale_price) : null;
 
   return (
     <div className="mt-8 space-y-6 max-w-2xl">
-      {/* Sale Banner */}
       <div className="panel p-6">
-        <h2 className="font-display text-xl font-bold mb-1 flex items-center gap-2">
-          <Tag size={18}/> Sale promotion banner
-        </h2>
+        <h2 className="font-display text-xl font-bold mb-1 flex items-center gap-2"><Tag size={18}/> Sale promotion banner</h2>
         <p className="text-sm text-muted-foreground mb-5">Shows at the top of the Gallery page and as a ticker on all pages.</p>
-
         <div className="space-y-3">
           <div>
             <label className="text-xs text-muted-foreground mb-1 block font-medium">Banner title *</label>
             <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
-              placeholder="e.g. Weekend Special 🔥"
-              className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
+              placeholder="e.g. Weekend Special 🔥" className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
           </div>
-
           <div>
             <label className="text-xs text-muted-foreground mb-1 block font-medium">Description</label>
             <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-              placeholder="e.g. Book a portrait session this weekend and save!"
-              rows={2} className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
+              placeholder="e.g. Book a portrait session this weekend and save!" rows={2}
+              className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
           </div>
-
           <div className="grid md:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block font-medium">Discount label (shown on badge)</label>
               <input value={form.discount_label} onChange={e => setForm({ ...form, discount_label: e.target.value })}
-                placeholder="e.g. 20% OFF or Save R500"
-                className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
+                placeholder="e.g. 20% OFF or Save R500" className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block font-medium">Ends at *</label>
-              <input type="datetime-local" value={form.ends_at}
-                onChange={e => setForm({ ...form, ends_at: e.target.value })}
+              <input type="datetime-local" value={form.ends_at} onChange={e => setForm({ ...form, ends_at: e.target.value })}
                 className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
             </div>
           </div>
-
-          {/* Promo code field */}
           <div>
             <label className="text-xs text-muted-foreground mb-1 block font-medium">Promo code (optional — shown on banner)</label>
             <input value={form.promo_code} onChange={e => setForm({ ...form, promo_code: e.target.value.toUpperCase() })}
-              placeholder="e.g. WEEKEND20"
-              className="bg-input border border-border rounded px-3 py-2 text-sm w-full font-mono uppercase" />
+              placeholder="e.g. WEEKEND20" className="bg-input border border-border rounded px-3 py-2 text-sm w-full font-mono uppercase" />
             {form.promo_code && (
               <div className="mt-1 text-xs text-primary bg-primary/10 border border-primary/20 rounded px-3 py-1.5">
                 ✓ Code <span className="font-bold">{form.promo_code}</span> will show on the banner so customers can copy it
               </div>
             )}
           </div>
-
-          {/* Link to package */}
           <div>
             <label className="text-xs text-muted-foreground mb-1 block font-medium">Link to a package (optional)</label>
-            <select value={form.package_id} onChange={e => handlePackageSelect(e.target.value)}
-  className="bg-input border border-border rounded px-3 py-2 text-sm w-full">
-  <option value="">— No package link —</option>
-  {packages.map((p: any) => (
-    <option key={p.id} value={p.id}>
-      {p.category} · {p.name} — R{Number(p.price).toLocaleString()}
-      {p.is_on_sale ? ` → SALE R${Number(p.sale_price).toLocaleString()}` : ""}
-    </option>
-  ))}
-</select>
+            <select value={form.package_name} onChange={e => handlePackageSelect(e.target.value)}
+              className="bg-input border border-border rounded px-3 py-2 text-sm w-full">
+              <option value="">— No package link —</option>
+              {packages.map((p: any) => (
+                <option key={p.id} value={p.name}>
+                  {p.category} · {p.name} — R{Number(p.price).toLocaleString()}
+                  {p.is_on_sale ? ` → SALE R${Number(p.sale_price).toLocaleString()}` : ""}
+                </option>
+              ))}
+            </select>
           </div>
-
-          {/* Original + Sale price — auto-filled from package, can override */}
           <div className="grid md:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block font-medium">Original price R (shown crossed out)</label>
-              <input type="number" value={form.original_price}
-                onChange={e => setForm({ ...form, original_price: e.target.value })}
-                placeholder="e.g. 7500"
-                className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
+              <input type="number" value={form.original_price} onChange={e => setForm({ ...form, original_price: e.target.value })}
+                placeholder="e.g. 7500" className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block font-medium">Sale price R (shown in orange)</label>
-              <input type="number" value={form.sale_price}
-                onChange={e => setForm({ ...form, sale_price: e.target.value })}
-                placeholder="e.g. 4000"
-                className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
+              <input type="number" value={form.sale_price} onChange={e => setForm({ ...form, sale_price: e.target.value })}
+                placeholder="e.g. 4000" className="bg-input border border-border rounded px-3 py-2 text-sm w-full" />
             </div>
           </div>
-
-          {/* Live preview of price display */}
           {form.original_price && form.sale_price && (
             <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/30">
               <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wider font-semibold">Banner price preview</div>
@@ -1556,39 +1403,27 @@ function PromoManager({ promo, qc }: { promo: any; qc: any }) {
                   <div className="font-display text-2xl font-bold text-orange-500">R{Number(form.sale_price).toLocaleString()}</div>
                 </div>
                 {savings && savings > 0 && (
-                  <div className="bg-orange-500 text-white text-xs font-bold px-3 py-1.5 rounded-full">
-                    Save R{savings.toLocaleString()}!
-                  </div>
+                  <div className="bg-orange-500 text-white text-xs font-bold px-3 py-1.5 rounded-full">Save R{savings.toLocaleString()}!</div>
                 )}
               </div>
             </div>
           )}
-
           <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" checked={form.is_active}
-              onChange={e => setForm({ ...form, is_active: e.target.checked })} />
+            <input type="checkbox" checked={form.is_active} onChange={e => setForm({ ...form, is_active: e.target.checked })} />
             Active (shows on website)
           </label>
-
           <div className="flex gap-2 pt-2">
-            <button onClick={save} className="btn-lime px-5 py-2.5 rounded text-sm font-semibold">
-              {promo ? "Update promotion" : "Create promotion"}
-            </button>
+            <button onClick={save} className="btn-lime px-5 py-2.5 rounded text-sm font-semibold">{promo ? "Update promotion" : "Create promotion"}</button>
             {promo && (
-              <button onClick={remove}
-                className="px-4 py-2.5 rounded text-sm text-destructive border border-destructive/40 hover:bg-destructive/10 inline-flex items-center gap-1.5">
+              <button onClick={remove} className="px-4 py-2.5 rounded text-sm text-destructive border border-destructive/40 hover:bg-destructive/10 inline-flex items-center gap-1.5">
                 <Trash2 size={14}/> Delete
               </button>
             )}
           </div>
         </div>
       </div>
-
-      {/* Info box about promo codes */}
       <div className="panel p-5 border-primary/20 bg-primary/5">
-        <div className="text-xs uppercase tracking-wider text-primary font-semibold mb-2 flex items-center gap-2">
-          <Tag size={12}/> Promo codes management
-        </div>
+        <div className="text-xs uppercase tracking-wider text-primary font-semibold mb-2 flex items-center gap-2"><Tag size={12}/> Promo codes management</div>
         <p className="text-sm text-muted-foreground">
           To create, edit or delete promo codes — go to the <button onClick={() => {}} className="text-primary font-semibold hover:underline">Packages tab</button> and scroll to the bottom where you'll find the Promo Codes panel.
         </p>
@@ -1602,7 +1437,6 @@ function ReviewsTab({ testimonials, qc }: { testimonials: any[]; qc: any }) {
   const refresh = () => qc.invalidateQueries({ queryKey: ["all-testimonials"] });
   const approve = async (id: string) => { await supabase.from("testimonials").update({ is_approved: true }).eq("id", id); refresh(); toast.success("Approved"); };
   const remove = async (id: string) => { if (!confirm("Delete review?")) return; await supabase.from("testimonials").delete().eq("id", id); refresh(); };
-
   const pending = testimonials.filter((t: any) => t.is_approved === false);
   const approved = testimonials.filter((t: any) => t.is_approved !== false);
 
@@ -1633,7 +1467,6 @@ function ReviewsTab({ testimonials, qc }: { testimonials: any[]; qc: any }) {
           </div>
         )}
       </div>
-
       <div className="panel p-6">
         <h2 className="font-display text-xl font-bold mb-4">Live reviews ({approved.length})</h2>
         {approved.length === 0 ? <Empty/> : (
@@ -1657,7 +1490,7 @@ function ReviewsTab({ testimonials, qc }: { testimonials: any[]; qc: any }) {
   );
 }
 
-// ─────────── WhatsApp template dropdown for booking cards ───────────
+// ─────────── WhatsApp template dropdown ───────────
 export function WhatsAppMessageMenu({ booking }: { booking: BookingForTemplate & { id: string; client_whatsapp?: string | null } }) {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<{ label: string; text: string } | null>(null);
@@ -1719,7 +1552,3 @@ export function DepositControls({ booking, onRefresh }: { booking: any; onRefres
     </div>
   );
 }
-
-
-
-

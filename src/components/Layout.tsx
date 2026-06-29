@@ -43,15 +43,19 @@ function GlobalPromoBanner() {
         .maybeSingle();
       return data;
     },
-    refetchInterval: 60000, // refresh every minute
+    refetchInterval: 60000,
   });
 
   const time = useCountdown(promo?.ends_at ?? null);
 
   if (!promo || dismissed) return null;
-
-  // If end date is set and has passed, don't show
   if (promo.ends_at && new Date(promo.ends_at) < new Date()) return null;
+
+  // Build search params using the correct DB column names
+  // package_category = the tab to open, package_name = the card to highlight
+  const promoSearch: Record<string, string> = {};
+  if (promo.package_category) promoSearch.category = promo.package_category;
+  if (promo.package_name) promoSearch.highlight = promo.package_name;
 
   return (
     <div className="relative z-40 bg-gradient-to-r from-primary/90 via-primary to-primary/90 text-primary-foreground px-4 py-2.5">
@@ -67,6 +71,12 @@ function GlobalPromoBanner() {
                 — {promo.description}
               </span>
             )}
+            {promo.package_category && (
+              <span className="text-xs bg-primary-foreground/15 text-primary-foreground px-2 py-0.5 rounded-full font-medium">
+                {promo.package_category}
+                {promo.package_name ? ` › ${promo.package_name}` : ""}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
@@ -80,13 +90,13 @@ function GlobalPromoBanner() {
               <span>left</span>
             </div>
           )}
-         <Link
-  to="/pricing"
-  search={{ highlight: promo.package_name ?? undefined } as any}
-  className="bg-primary-foreground text-primary text-xs font-bold px-3 py-1.5 rounded-full hover:bg-primary-foreground/90 transition-colors whitespace-nowrap"
->
-  View packages
-</Link>
+          <Link
+            to="/pricing"
+            search={promoSearch as any}
+            className="bg-primary-foreground text-primary text-xs font-bold px-3 py-1.5 rounded-full hover:bg-primary-foreground/90 transition-colors whitespace-nowrap"
+          >
+            View deal
+          </Link>
           <button
             onClick={() => setDismissed(true)}
             className="text-primary-foreground/70 hover:text-primary-foreground p-1 transition-colors"

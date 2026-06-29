@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Layout } from "@/components/Layout";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { QuoteCalculator } from "@/components/QuoteCalculator";
@@ -33,11 +32,11 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  // ✅ Testimonials from admin (approved only)
   const { data: testimonials = [], isLoading: testimonialsLoading } = useQuery({
     queryKey: ["testimonials-approved"],
     queryFn: async () =>
       (await supabase.from("testimonials").select("*").eq("is_approved", true).order("created_at", { ascending: false })).data ?? [],
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: hero = FALLBACK_HERO } = useQuery({
@@ -46,9 +45,9 @@ function Home() {
       const { data } = await supabase.from("hero_images").select("*").eq("is_active", true).order("sort_order");
       return data && data.length > 0 ? data : FALLBACK_HERO;
     },
+    staleTime: 10 * 60 * 1000,
   });
 
-  // ✅ Top 10 real photos only — no fallbacks
   const { data: featuredImages, isLoading: galleryLoading } = useQuery({
     queryKey: ["gallery-featured"],
     queryFn: async () => {
@@ -64,6 +63,7 @@ function Home() {
         return !url.includes("/video/") && !/\.(mp4|mov|webm)/.test(url);
       });
     },
+    staleTime: 5 * 60 * 1000,
   });
 
   const [activeCat, setActiveCat] = useState(0);
@@ -84,7 +84,9 @@ function Home() {
               key={c.id}
               src={c.url}
               alt={c.category_label}
+              fetchPriority={i === 0 ? "high" : "low"}
               loading={i === 0 ? "eager" : "lazy"}
+              decoding={i === 0 ? "sync" : "async"}
               className={
                 "absolute inset-0 w-full h-full object-cover object-top transition-opacity duration-1000 " +
                 (i === activeCat ? "opacity-100" : "opacity-0")
@@ -154,7 +156,7 @@ function Home() {
         </div>
       </section>
 
-      {/* ── Recent Work — top 10 real photos ── */}
+      {/* ── Recent Work ── */}
       <section className="max-w-7xl mx-auto px-5 lg:px-8 mt-16 sm:mt-24">
         <div className="flex items-end justify-between flex-wrap gap-4 mb-8">
           <div>
@@ -168,7 +170,6 @@ function Home() {
           </Link>
         </div>
 
-        {/* Skeleton loader */}
         {galleryLoading && (
           <div className="columns-2 md:columns-3 gap-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -177,7 +178,6 @@ function Home() {
           </div>
         )}
 
-        {/* Top 10 real Cloudinary photos */}
         {!galleryLoading && featuredImages && featuredImages.length > 0 && (
           <>
             <div className="columns-2 md:columns-3 gap-3 [column-fill:_balance]">
@@ -188,6 +188,7 @@ function Home() {
                     src={img.url}
                     alt={img.category}
                     loading="lazy"
+                    decoding="async"
                     className="w-full h-auto block group-hover:scale-105 transition-transform duration-700"
                   />
                 </Link>
@@ -202,7 +203,6 @@ function Home() {
           </>
         )}
 
-        {/* Empty state */}
         {!galleryLoading && (!featuredImages || featuredImages.length === 0) && (
           <div className="text-center py-20 text-muted-foreground">
             <Camera size={40} className="mx-auto mb-4 opacity-20" />
@@ -215,7 +215,7 @@ function Home() {
       {/* ── Quote Calculator ── */}
       <QuoteCalculator embedded />
 
-      {/* ── Testimonials — from admin ── */}
+      {/* ── Testimonials ── */}
       <section className="max-w-7xl mx-auto px-5 lg:px-8 mt-24">
         <div className="flex items-end justify-between flex-wrap gap-4 mb-10">
           <div>
@@ -235,7 +235,6 @@ function Home() {
           )}
         </div>
 
-        {/* Skeleton */}
         {testimonialsLoading && (
           <div className="grid md:grid-cols-3 gap-4">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -335,11 +334,6 @@ function HomeAuthPanel() {
     );
   }
 
-  const google = async () => {
-    const r = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin + "/dashboard" });
-    if (r.error) toast.error("Couldn't sign in with Google");
-  };
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -367,18 +361,6 @@ function HomeAuthPanel() {
         </button>
       </div>
       <p className="text-sm text-muted-foreground mb-5">Save your favourites and re-book in one click.</p>
-      <button onClick={google} className="w-full panel border-border hover:border-primary transition-colors px-4 py-2.5 rounded-md text-sm flex items-center justify-center gap-2">
-        <svg width="16" height="16" viewBox="0 0 48 48">
-          <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 01-11.3 8 12 12 0 110-24c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 1024 44a20 20 0 0019.6-23.5z" />
-          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8A12 12 0 0124 12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 006.3 14.7z" />
-          <path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.3A12 12 0 0112.7 28l-6.5 5A20 20 0 0024 44z" />
-          <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 01-4.1 5.5l6.3 5.3C42.3 36 44 30.5 44 24c0-1.2-.1-2.3-.4-3.5z" />
-        </svg>
-        Continue with Google
-      </button>
-      <div className="flex items-center gap-3 my-4 text-[10px] uppercase tracking-widest text-muted-foreground">
-        <span className="flex-1 h-px bg-border" />or email<span className="flex-1 h-px bg-border" />
-      </div>
       <form onSubmit={submit} className="space-y-2.5">
         {mode === "up" && (
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Full name" required
@@ -392,6 +374,13 @@ function HomeAuthPanel() {
           {busy ? "Please wait..." : mode === "in" ? "Sign in" : "Create account"}
         </button>
       </form>
+      {mode === "in" && (
+        <div className="mt-3 text-center">
+          <Link to="/forgot-password" className="text-xs text-muted-foreground hover:text-primary transition-colors">
+            Forgot password?
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

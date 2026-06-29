@@ -683,34 +683,57 @@ const cardSalePrice = isPromoTarget
                 <input type="hidden" {...register("preferred_date")}/>
               </Field>
 
-              {/* ── TIME SLOTS ── */}
-              {selectedDate && !slotInfo.blocked && slotInfo.slots.length > 0 && (
+             {/* ── TIME SLOTS ── */}
+              {selectedDate && !slotInfo.blocked && (
                 <div>
                   <div className="text-xs text-muted-foreground mb-2 font-medium">
-                    Available time slots for {new Date(selectedDate+"T00:00:00").toLocaleDateString("en-ZA",{weekday:"long",day:"numeric",month:"long"})}
+                    Preferred time for {new Date(selectedDate+"T00:00:00").toLocaleDateString("en-ZA",{weekday:"long",day:"numeric",month:"long"})}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {slotInfo.slots.map(t => {
-                      const isBooked = bookedTimes.includes(t);
-                      const isSelected = selectedTime === t;
-                      return (
-                        <button key={t} type="button" disabled={isBooked} onClick={() => setValue("preferred_time", t)}
-                          className={`px-4 py-2 rounded-full text-xs font-semibold border transition-colors
-                            ${isSelected ? "bg-primary text-primary-foreground border-primary" :
-                              isBooked ? "bg-secondary/40 text-muted-foreground border-border line-through cursor-not-allowed opacity-60" :
-                              "bg-background text-foreground border-border hover:border-primary"}`}>
-                          {t}{isBooked && <span className="ml-1.5 text-[9px] opacity-70">Booked</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {selectedTime ? (
-                    <div className="mt-2 text-xs bg-primary/10 border border-primary/20 rounded-md px-3 py-2 text-primary font-medium">
-                      ✓ Selected time: <span className="font-bold">{selectedTime}</span>
-                    </div>
+
+                  {slotInfo.slots.length > 0 ? (
+                    <>
+                      <div className="flex flex-wrap gap-2">
+                        {slotInfo.slots.map(t => {
+                          const isBooked = bookedTimes.includes(t);
+                          const isSelected = selectedTime === t;
+                          return (
+                            <button key={t} type="button" disabled={isBooked} onClick={() => setValue("preferred_time", t)}
+                              className={`px-4 py-2 rounded-full text-xs font-semibold border transition-colors
+                                ${isSelected ? "bg-primary text-primary-foreground border-primary" :
+                                  isBooked ? "bg-secondary/40 text-muted-foreground border-border line-through cursor-not-allowed opacity-60" :
+                                  "bg-background text-foreground border-border hover:border-primary"}`}>
+                              {t}{isBooked && <span className="ml-1.5 text-[9px] opacity-70">Booked</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {selectedTime ? (
+                        <div className="mt-2 text-xs bg-primary/10 border border-primary/20 rounded-md px-3 py-2 text-primary font-medium">
+                          ✓ Selected time: <span className="font-bold">{selectedTime}</span>
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-xs text-muted-foreground italic">
+                          Tap a slot above to select your preferred time
+                        </div>
+                      )}
+                    </>
                   ) : (
-                    <div className="mt-2 text-xs text-muted-foreground italic">
-                      Tap a slot above to select your preferred time
+                    /* No slots configured — let customer enter their preferred time freely */
+                    <div>
+                      <input
+                        type="time"
+                        value={selectedTime ?? ""}
+                        onChange={e => setValue("preferred_time", e.target.value)}
+                        className="input max-w-[180px]"
+                      />
+                      {selectedTime && (
+                        <div className="mt-2 text-xs bg-primary/10 border border-primary/20 rounded-md px-3 py-2 text-primary font-medium">
+                          ✓ Preferred time: <span className="font-bold">{selectedTime}</span>
+                        </div>
+                      )}
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Enter your preferred start time — we'll confirm availability with you.
+                      </div>
                     </div>
                   )}
                 </div>

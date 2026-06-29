@@ -4,20 +4,16 @@ import { useEffect, useState } from "react";
 
 interface LogoProps { className?: string; }
 
-export function Logo({ className = "h-40 w-auto" }: LogoProps) {
-  const [isDark, setIsDark] = useState(
-    document.documentElement.classList.contains("dark") ||
-    !document.documentElement.classList.contains("light")
-  );
+function getIsDark() {
+  const root = document.documentElement;
+  return root.classList.contains("dark") || !root.classList.contains("light");
+}
+
+export function Logo({ className = "h-12 w-auto" }: LogoProps) {
+  const [isDark, setIsDark] = useState(getIsDark);
 
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      const root = document.documentElement;
-      setIsDark(
-        root.classList.contains("dark") ||
-        !root.classList.contains("light")
-      );
-    });
+    const observer = new MutationObserver(() => setIsDark(getIsDark()));
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["class"],
@@ -30,6 +26,7 @@ export function Logo({ className = "h-40 w-auto" }: LogoProps) {
       src={isDark ? logoDark : logoLight}
       alt="Tann Media"
       className={className}
+      style={{ height: "48px", width: "auto" }}
     />
   );
 }

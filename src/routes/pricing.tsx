@@ -36,14 +36,13 @@ export const Route = createFileRoute("/pricing")({
   component: Pricing,
 });
 
-// Case-insensitive trimmed match helper
-const looslyMatch = (a?: string | null, b?: string | null) =>
+const looseMatch = (a?: string | null, b?: string | null) =>
   !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
 
 function Pricing() {
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [bookingModal, setBookingModal] = useState<{ pkg: any; pricing: any } | null>(null);
-  const [highlighted, setHighlighted] = useState(false);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const { highlight, category } = Route.useSearch();
@@ -72,33 +71,36 @@ function Pricing() {
         .eq("is_active", true).order("sort_order")).data ?? [],
   });
 
-  // Switch tab when ?category= arrives
+  // When ?category= arrives, switch tab
   useEffect(() => {
     if (category) setActiveTab(category);
   }, [category]);
 
-  // Switch tab + scroll when ?highlight= arrives — runs after packages load
+  // When ?highlight= arrives, find the exact package (matched by category + name),
+  // switch to its tab, scroll to it and flash it
   useEffect(() => {
     if (!highlight || isLoading || packages.length === 0) return;
 
-   const pkg = packages.find((p: any) =>
-  p.id === highlight || looslyMatch(p.name, highlight)
-);
-    // Switch to the right tab first
-    setActiveTab(pkg.category);
+    // Match by package_id first (most reliable), then name+category
+    const pkg = packages.find((p: any) =>
+      p.id === highlight ||
+      (looseMatch(p.name, highlight) && (category ? looseMatch(p.category, category) : true))
+    );
 
-    // Give React two frames to render the tab, then scroll + flash
+    if (!pkg) return; // no match — do nothing, don't crash
+
+    setActiveTab(pkg.category);
+    setHighlightedId(pkg.id);
+
     const t1 = setTimeout(() => {
       const el = document.getElementById(`pkg-${pkg.id}`);
       if (!el) return;
       el.scrollIntoView({ behavior: "smooth", block: "center" });
-      setHighlighted(true);
-      // Remove flash ring after 3 seconds
-      setTimeout(() => setHighlighted(false), 3000);
+      setTimeout(() => setHighlightedId(null), 3000);
     }, 400);
 
     return () => clearTimeout(t1);
-  }, [highlight, isLoading, packages]);
+  }, [highlight, category, isLoading, packages]);
 
   const grouped: { cat: string; items: typeof packages }[] = [];
   packages.forEach((p: any) => {
@@ -111,34 +113,31 @@ function Pricing() {
   const currentTab = activeTab ?? categories[0] ?? null;
   const activeGroup = grouped.find(g => g.cat === currentTab);
 
-  // Match by name only (case-insensitive) — category is already guaranteed
-  // by the tab switch, so we don't need to double-check it here
- const getEffectivePricing = (p: any) => {
-  // Match by package_id first (exact), fallback to name+category for old promos
-  const promoHits = activePromo?.sale_price != null && (
-    (activePromo.package_id && activePromo.package_id === p.id) ||
-    (!activePromo.package_id &&
-      looslyMatch(activePromo.package_name, p.name) &&
-      looslyMatch(activePromo.package_category, p.category))
-  );
-  if (promoHits) {
-    return {
-      price: Number(activePromo.sale_price),
-      originalPrice: Number(p.price),
-      onSale: true,
-      savings: Number(p.price) - Number(activePromo.sale_price),
-    };
-  }
-  if (p.is_on_sale && p.sale_price != null) {
-    return {
-      price: Number(p.sale_price),
-      originalPrice: Number(p.price),
-      onSale: true,
-      savings: Number(p.price) - Number(p.sale_price),
-    };
-  }
-  return { price: Number(p.price), originalPrice: null, onSale: false, savings: null };
-};
+  const getEffectivePricing = (p: any) => {
+    const promoHits = activePromo?.sale_price != null && (
+      (activePromo.package_id && activePromo.package_id === p.id) ||
+      (!activePromo.package_id &&
+        looseMatch(activePromo.package_name, p.name) &&
+        looseMatch(activePromo.package_category, p.category))
+    );
+    if (promoHits) {
+      return {
+        price: Number(activePromo.sale_price),
+        originalPrice: Number(p.price),
+        onSale: true,
+        savings: Number(p.price) - Number(activePromo.sale_price),
+      };
+    }
+    if (p.is_on_sale && p.sale_price != null) {
+      return {
+        price: Number(p.sale_price),
+        originalPrice: Number(p.price),
+        onSale: true,
+        savings: Number(p.price) - Number(p.sale_price),
+      };
+    }
+    return { price: Number(p.price), originalPrice: null, onSale: false, savings: null };
+  };
 
   const handleBookClick = (p: any) => {
     const pricing = getEffectivePricing(p);
@@ -198,7 +197,7 @@ function Pricing() {
                   key={p.id}
                   p={p}
                   pricing={getEffectivePricing(p)}
-                  isHighlighted={highlighted && looslyMatch(p.name, highlight)}
+                  isHighlighted={highlightedId === p.id}
                   onBook={() => handleBookClick(p)}
                 />
               ))}
